@@ -347,15 +347,6 @@ const HNUi = (() => {
     }
   }
 
-  window.HNUi.deleteEventUI = async function(evId, empId) {
-    try {
-      await HNApi.deleteEvent(evId);
-      loadTimelineUI(empId);
-    } catch (e) {
-      HN.toast("Could not delete event");
-    }
-  };
-
   // Add remaining modal handlers
   // (continuation with Add, Edit, Connect, EditConnection modals)
 

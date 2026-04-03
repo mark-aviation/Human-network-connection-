@@ -477,37 +477,6 @@
     });
   }
 
-  /* ── Line toggle ────────────────────────── */
-  function _applyLineToggle() {
-    const state = window._hnLineState || { formal: false, informal: false, cross_company: false };
-    const edgeElems  = window._hnEdgeElems;
-    const crossElems = window._hnCrossElems;
-    if (!edgeElems || !crossElems) return;
-
-    // Internal lines (formal + informal)
-    edgeElems.transition().duration(250)
-      .attr("stroke-opacity", d => {
-        if (d.type === "formal")   return state.formal   ? 0.55 : 0;
-        if (d.type === "informal") return state.informal ? 0.55 : 0;
-        return 0;
-      });
-
-    // Cross-company lines
-    crossElems.transition().duration(250)
-      .attr("stroke-opacity", state.cross_company ? 0.7 : 0);
-
-    // Update button styles
-    ["formal","informal","cross_company"].forEach(type => {
-      const btn = document.getElementById(`line-toggle-${type}`);
-      if (!btn) return;
-      if (state[type]) {
-        btn.classList.add("active");
-      } else {
-        btn.classList.remove("active");
-      }
-    });
-  }
-
   function initLineToggles() {
     if (document.getElementById("line-toggles")) return; // already exists
 
