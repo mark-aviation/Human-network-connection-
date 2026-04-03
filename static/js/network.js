@@ -11,7 +11,26 @@
   // ── Initialize Controllers ──────────────
   GraphController.initDOM();
   const DOM = GraphController.DOM;
-  
+
+  // ── DOM references ───────────────────────
+  const svg          = document.getElementById("graph-svg");
+  const canvas       = document.getElementById("graph-canvas");
+  const panel        = document.getElementById("profile-panel");
+  const panelClose   = document.getElementById("panel-close");
+  const orgOverlay   = document.getElementById("org-overlay");
+  const orgClose     = document.getElementById("org-close");
+  const searchInput  = document.getElementById("search-input");
+  const addPersonBtn = document.getElementById("add-person-btn");
+  const addModal     = document.getElementById("add-modal");
+  const addCancel    = document.getElementById("add-cancel");
+  const addForm      = document.getElementById("add-form");
+  const fileInput    = document.getElementById("file-input");
+  const uploadPrev   = document.getElementById("upload-prev");
+  const uploadPh     = document.getElementById("upload-ph");
+  const msgBtn       = document.getElementById("msg-btn");
+  const orgBtn       = document.getElementById("org-btn");
+  const connectModal = document.getElementById("connect-modal");
+
   let { TIER_R, TIER_C } = D3Renderer;
   let G, sim, zoom, nodeLayer, bubElems, lblElems;
   let focusActive = false, focusNode = null;
@@ -320,251 +339,6 @@
     openPanel();
   }
 
-    // ── Cross-company edges — HIDDEN by default ──
-    const crossLinks = links.filter(e => e.type === "cross_company");
-    const crossElems = crossLayer.selectAll("path").data(crossLinks).enter()
-      .append("path").attr("fill","none").attr("stroke","#b49632")
-      .attr("stroke-width",1.3).attr("stroke-dasharray","5 6")
-      .attr("stroke-opacity", 0)   // hidden by default
-      .attr("stroke-linecap","round");
-
-    // Pulse animation still attached but invisible until toggled
-    crossElems.each(function() {
-      const el = d3.select(this);
-      (function pulse() {
-        el.transition().duration(2000).ease(d3.easeLinear)
-          .attrTween("stroke-dashoffset",()=>d3.interpolate(0,-22)).on("end",pulse);
-      })();
-    });
-
-    // ── Internal edges — HIDDEN by default ──
-    const internalLinks = links.filter(e => e.type !== "cross_company");
-    const edgeElems = edgeLayer.selectAll("path").data(internalLinks).enter()
-      .append("path").attr("fill","none")
-      .attr("stroke",       d => d.type === "formal" ? "#7e7385" : "#006b5f")
-      .attr("stroke-width", d => {
-        const base = d.type === "formal" ? 2.2 : 1.8;
-        return base * (d.strength || 1.0);
-      })
-      .attr("stroke-dasharray", d => d.type === "informal" ? "6 4" : null)
-      .attr("stroke-opacity", 0);  // hidden by default
-
-    // ── Store refs globally for toggle buttons ──
-    window._hnEdgeElems  = edgeElems;
-    window._hnCrossElems = crossElems;
-    window._hnInternalLinks = internalLinks;
-    // Preserve existing line state, or initialize if not set
-    if (!window._hnLineState) {
-      window._hnLineState = { formal: true, informal: false, cross_company: false };
-    }
-
-    // Apply toggle state after re-render
-    _applyLineToggle();
-
-    // ── Nodes ────────────────────────────────
-    const nodeElems = nodeLayer.selectAll("g.node").data(live).enter()
-      .append("g").attr("class", d=>`node node--${d.tier}`)
-      .style("cursor","pointer").attr("opacity",0)
-      .call(
-        d3.drag()
-          .clickDistance(4) // only fire drag if moved more than 4px — prevents dblclick being eaten
-          .on("start", (e, d) => {
-            e.sourceEvent.stopPropagation();
-            // Freeze entire company cluster without kicking physics
-            live.filter(n => n.company_id === d.company_id).forEach(n => { n.fx = n.x; n.fy = n.y; });
-            if (sim) { sim.alphaTarget(0); sim.stop(); } // stop physics completely — no slingshot
-          })
-          .on("drag", (e, d) => {
-            const dx = e.dx, dy = e.dy;
-            live.filter(n => n.company_id === d.company_id).forEach(n => {
-              n.x += dx; n.y += dy;
-              n.fx = n.x; n.fy = n.y;
-            });
-            // Repaint directly — no simulation needed
-            nodeLayer.selectAll("g.node")
-              .attr("transform", nd => `translate(${nd.x},${nd.y})`);
-            edgeLayer.selectAll("path").attr("d", internalPath);
-            crossLayer.selectAll("path").attr("d", crossPath);
-            companies.forEach(co => updateBubble(co, live, bubElems, lblElems));
-          })
-          .on("end", (e, d) => {
-            // Keep nodes pinned where dropped — don't release fx/fy
-            // Gently restart physics at very low alpha just to settle edges
-            if (sim) sim.alpha(0.05).restart();
-          })
-      )
-      .on("click", onNodeClick);
-
-    nodeElems.append("circle")
-      .attr("r",    d=>TIER_R[d.tier])
-      .attr("fill", d=>TIER_C[d.tier].fill)
-      .attr("stroke",       d=>TIER_C[d.tier].stroke)
-      .attr("stroke-width", 2)
-      .attr("filter","url(#nshadow)");
-
-    nodeElems.each(function(d) {
-      if (!d.image) return;
-      d3.select(this).append("image")
-        .attr("href",d.image)
-        .attr("x",-TIER_R[d.tier]).attr("y",-TIER_R[d.tier])
-        .attr("width",TIER_R[d.tier]*2).attr("height",TIER_R[d.tier]*2)
-        .attr("clip-path",`url(#cp-${d.id})`)
-        .attr("preserveAspectRatio","xMidYMid slice");
-    });
-
-    nodeElems.append("text").attr("text-anchor","middle").attr("dy","0.35em")
-      .attr("fill",d=>TIER_C[d.tier].text)
-      .attr("font-family","'Manrope',sans-serif")
-      .attr("font-size",d=>d.tier==="executive"?13:11).attr("font-weight","700")
-      .attr("pointer-events","none")
-      .text(d=>d.image?"":HN.initials(d.name));
-
-    // Name label — larger offset so it clears the node
-    nodeElems.append("text").attr("text-anchor","middle")
-      .attr("dy",d=>TIER_R[d.tier]+16).attr("class","node-label")
-      .attr("pointer-events","none").text(d=>d.name);
-
-    nodeElems.append("text").attr("text-anchor","middle")
-      .attr("dy",d=>TIER_R[d.tier]+30).attr("class","node-sublabel")
-      .attr("pointer-events","none").text(d=>d.title);
-
-    // Hover glow
-    nodeElems.append("circle").attr("class","nglow")
-      .attr("r",d=>TIER_R[d.tier]+7).attr("fill","none")
-      .attr("stroke",d=>TIER_C[d.tier].fill).attr("stroke-width",3)
-      .attr("opacity",0).style("pointer-events","none");
-
-    nodeElems
-      .on("mouseenter",function(){
-        d3.select(this).select(".nglow").transition().duration(100).attr("opacity",.45);
-        d3.select(this).select("circle:first-child").transition().duration(100).attr("r",d=>TIER_R[d.tier]+3);
-      })
-      .on("mouseleave",function(){
-        d3.select(this).select(".nglow").transition().duration(180).attr("opacity",0);
-        d3.select(this).select("circle:first-child").transition().duration(180).attr("r",d=>TIER_R[d.tier]);
-      });
-
-    // Staggered reveal animation
-    nodeElems.transition().duration(400).delay((_,i)=>i*40).attr("opacity",1);
-
-    // ── Phase 3: Enable keyboard navigation ─────────────
-    if (HNFeatures && HNFeatures.initKeyboardNavigation) {
-      HNFeatures.initKeyboardNavigation(nodeLayer, fillPanel);
-    }
-
-    // Attach right-click context menu
-    attachContextMenu(nodeElems);
-
-    // Attach double-click focus picker
-    nodeElems.on("dblclick", function(event, d) {
-      event.preventDefault();
-      event.stopPropagation();
-      showFocusPicker(event, d);
-    });
-
-    // Company bubbles and interactions already rendered by D3Renderer.renderCompanies() above
-    // ── Phase 3: Apply dynamic text contrast to company labels (WCAG) ──
-    if (HNFeatures && HNFeatures.applyDynamicContrast) {
-      HNFeatures.applyDynamicContrast(bubbleLayer, companies);
-    }
-
-    // ── Tick ─────────────────────────────────
-    sim.on("tick", () => {
-      edgeElems.attr("d", internalPath);
-      crossElems.attr("d", crossPath);
-      nodeElems.attr("transform", d=>`translate(${d.x},${d.y})`);
-      companies.forEach(co => updateBubble(co, live, bubElems, lblElems));
-    });
-  }
-
-  function initLineToggles() {
-    if (document.getElementById("line-toggles")) return; // already exists
-
-    const container = document.createElement("div");
-    container.id = "line-toggles";
-    container.style.cssText = `
-      position:fixed;
-      top:80px;
-      right:16px;
-      z-index:150;
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    `;
-
-    const buttons = [
-      { type: "formal",        label: "Reporting",     color: "#7e7385", dash: "none" },
-      { type: "informal",      label: "Collaboration", color: "#006b5f", dash: "6 4"  },
-      { type: "cross_company", label: "Cross-Company", color: "#b49632", dash: "5 6"  },
-    ];
-
-    buttons.forEach(({ type, label, color, dash }) => {
-      const btn = document.createElement("button");
-      btn.id = `line-toggle-${type}`;
-      btn.title = `Toggle ${label} lines`;
-      btn.style.cssText = `
-        display:flex;align-items:center;gap:8px;
-        padding:7px 12px;
-        background:var(--surface-card);
-        border:1.5px solid var(--outline-variant);
-        border-radius:8px;
-        cursor:pointer;
-        font-family:var(--font-ui);
-        font-size:11px;font-weight:700;
-        color:var(--text-muted);
-        text-transform:uppercase;letter-spacing:.06em;
-        box-shadow:var(--shadow-ambient);
-        transition:all 150ms;
-        white-space:nowrap;
-        opacity:0.7;
-      `;
-
-      // Line preview SVG
-      const svgNS = "http://www.w3.org/2000/svg";
-      const lineSvg = document.createElementNS(svgNS, "svg");
-      lineSvg.setAttribute("width","28");lineSvg.setAttribute("height","10");
-      lineSvg.style.flexShrink = "0";
-      const line = document.createElementNS(svgNS, "line");
-      line.setAttribute("x1","2");line.setAttribute("y1","5");
-      line.setAttribute("x2","26");line.setAttribute("y2","5");
-      line.setAttribute("stroke", color);
-      line.setAttribute("stroke-width","2");
-      if (dash !== "none") line.setAttribute("stroke-dasharray", dash);
-      lineSvg.appendChild(line);
-
-      btn.appendChild(lineSvg);
-      btn.appendChild(document.createTextNode(label));
-
-      btn.addEventListener("click", () => {
-        window._hnLineState[type] = !window._hnLineState[type];
-        _applyLineToggle();
-      });
-
-      // Hover effects
-      btn.addEventListener("mouseenter", () => { btn.style.opacity = "1"; });
-      btn.addEventListener("mouseleave", () => {
-        btn.style.opacity = window._hnLineState[type] ? "1" : "0.7";
-      });
-
-      container.appendChild(btn);
-    });
-
-    document.getElementById("graph-canvas").appendChild(container);
-  }
-
-  // Active state CSS — injected once
-  const styleTag = document.createElement("style");
-  styleTag.textContent = `
-    #line-toggles button.active {
-      opacity:1 !important;
-      background:var(--surface-high) !important;
-      border-color:var(--primary) !important;
-      color:var(--text-primary) !important;
-      box-shadow:0 0 0 2px rgba(129,39,207,0.15), var(--shadow-ambient) !important;
-    }
-  `;
-  document.head.appendChild(styleTag);
-
   /* ── Company cluster drag ───────────────── */
   function lockCompany(d, lock, live) {
     live.filter(n => n.company_id === d.company_id && n.id !== d.id)
@@ -639,19 +413,6 @@
     const mx = (d.source.x+d.target.x)/2 - (d.target.y-d.source.y)*.15;
     const my = (d.source.y+d.target.y)/2 + (d.target.x-d.source.x)*.15;
     return `M${d.source.x},${d.source.y}Q${mx},${my} ${d.target.x},${d.target.y}`;
-  }
-
-  let currentPanelNode = null;
-
-  /* ── Node click → panel ─────────────────── */
-  function onNodeClick(event, d) {
-    event.stopPropagation();
-    const W=svg.clientWidth, H=svg.clientHeight;
-    d3.select(svg).transition().duration(480).ease(d3.easeCubicInOut)
-      .call(zoom.transform, d3.zoomIdentity.translate(W/2-d.x*1.1,H/2-d.y*1.1).scale(1.1));
-    currentPanelNode = d;
-    fillPanel(d);
-    openPanel();
   }
 
   function fillPanel(d) {
@@ -1398,7 +1159,6 @@
   /* ══════════════════════════════════════════
      CONNECT PEOPLE MODAL
   ══════════════════════════════════════════ */
-  const connectModal  = document.getElementById("connect-modal");
   const connSearch    = document.getElementById("conn-search");
   const connResults   = document.getElementById("conn-search-results");
   const connToSel     = document.getElementById("conn-to-selected");

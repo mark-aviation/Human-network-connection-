@@ -227,9 +227,11 @@ const D3Renderer = (() => {
               .attr("fill", col.fill);
           });
 
-        const bl = bg.append("text").attr("class", "co-label")
+        const bl = bg.selectAll("text.co-label").data([co]).enter().append("text").attr("class", "co-label")
           .attr("fill", col.label).attr("text-anchor", "middle")
-          .attr("pointer-events", "none").attr("opacity", 0.85)
+          .attr("font-family", "'Manrope',sans-serif")
+          .attr("font-size", "14px").attr("font-weight", "800")
+          .attr("pointer-events", "none").attr("opacity", 0.95)
           .text(co.name);
 
         bubElems[co.id] = bp;
@@ -270,7 +272,7 @@ const D3Renderer = (() => {
       `;
 
       bubElems[co.id].attr("d", path);
-      lblElems[co.id].attr("x", cx).attr("y", cy);
+      lblElems[co.id].attr("x", cx).attr("y", cy - ry - 20);
     },
   };
 })();
