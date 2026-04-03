@@ -74,8 +74,17 @@
   <div class="nav-actions">
     <button class="nav-btn" id="theme-btn"><span class="material-symbols-outlined" id="theme-icon">dark_mode</span></button>
     <div class="nav-avatar">YO</div>
+    <button class="nav-hamburger" id="hamburger-btn" aria-label="Menu">
+      <span class="material-symbols-outlined">menu</span>
+    </button>
   </div>
 </header>
+<nav class="mobile-nav-drawer" id="mobile-drawer">
+  <a class="mobile-nav-link" href="/"><span class="material-symbols-outlined">hub</span>Network Map</a>
+  <a class="mobile-nav-link" href="/directory"><span class="material-symbols-outlined">people</span>Directory</a>
+  <a class="mobile-nav-link" href="/insights"><span class="material-symbols-outlined">insights</span>Insights</a>
+  <a class="mobile-nav-link active" href="/settings"><span class="material-symbols-outlined">settings</span>Settings</a>
+</nav>
 
 <div class="page-wrap">
   <!-- Sidebar nav -->
@@ -179,10 +188,54 @@
           <div class="export-title">Export as CSV</div>
           <div class="export-desc">People directory in spreadsheet format — name, title, department, company</div>
           <a href="/api/export/csv" class="btn-primary" style="text-decoration:none;margin-top:auto;background:linear-gradient(135deg,var(--secondary),#008c7a)"><span class="material-symbols-outlined">download</span>Download CSV</a>
+      </div>
+      <div class="export-card">
+        <div class="export-icon" style="background:rgba(166,48,71,0.10)"><span class="material-symbols-outlined" style="color:var(--tertiary)">picture_as_pdf</span></div>
+        <div class="export-title">Export as PDF</div>
+        <div class="export-desc">Printable people directory and connections list — opens print dialog</div>
+        <a href="/api/export/pdf" target="_blank" class="btn-primary" style="text-decoration:none;margin-top:auto;background:linear-gradient(135deg,var(--tertiary),#c4405a)"><span class="material-symbols-outlined">print</span>Export PDF</a>
         </div>
       </div>
 
-      <div class="settings-group" style="margin-top:var(--sp-6)">
+      <!-- Import section -->
+      <h3 style="font-family:var(--font-brand);font-size:var(--text-lg);font-weight:800;color:var(--text-primary);margin:var(--sp-8) 0 var(--sp-4);letter-spacing:-.02em">Import Data</h3>
+      <div class="export-grid">
+        <div class="export-card">
+          <div class="export-icon" style="background:rgba(129,39,207,0.10)"><span class="material-symbols-outlined" style="color:var(--primary)">upload_file</span></div>
+          <div class="export-title">Import People</div>
+          <div class="export-desc">Upload a CSV of people to add or update in bulk</div>
+          <a href="/api/templates/people.csv" class="btn-ghost" style="text-decoration:none;justify-content:center">
+            <span class="material-symbols-outlined" style="font-size:15px">download</span>Download Template
+          </a>
+          <div class="upload-zone" id="people-upload-zone" style="padding:var(--sp-3)">
+            <input type="file" id="people-csv-input" accept=".csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"/>
+            <div style="font-size:var(--text-sm);color:var(--text-secondary);text-align:center">
+              <span class="material-symbols-outlined" style="font-size:20px;color:var(--primary);display:block;margin-bottom:4px">upload</span>
+              Click to upload people.csv
+            </div>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-icon" style="background:rgba(0,107,95,0.10)"><span class="material-symbols-outlined" style="color:var(--secondary)">upload_file</span></div>
+          <div class="export-title">Import Connections</div>
+          <div class="export-desc">Upload a CSV of relationships between people</div>
+          <a href="/api/templates/connections.csv" class="btn-ghost" style="text-decoration:none;justify-content:center">
+            <span class="material-symbols-outlined" style="font-size:15px">download</span>Download Template
+          </a>
+          <div class="upload-zone" id="conn-upload-zone" style="padding:var(--sp-3)">
+            <input type="file" id="conn-csv-input" accept=".csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"/>
+            <div style="font-size:var(--text-sm);color:var(--text-secondary);text-align:center">
+              <span class="material-symbols-outlined" style="font-size:20px;color:var(--secondary);display:block;margin-bottom:4px">upload</span>
+              Click to upload connections.csv
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Import preview modal trigger area -->
+      <div id="import-preview-area" style="display:none;margin-top:var(--sp-4)"></div>
+
+      <div class="settings-group" style="margin-top:var(--sp-8)">
         <div class="settings-row">
           <div class="settings-row-info">
             <div class="settings-row-label" style="color:var(--tertiary)">Danger Zone</div>
@@ -355,6 +408,96 @@
     try { await HN.api.del(`/api/companies/${id}`); HN.toast(`🗑️  ${name} deleted`); await loadCompanies(); }
     catch(e){ HN.toast(`⚠️  ${e.message}`); }
   };
+
+  // ── CSV Import ─────────────────────────────
+  function setupImport(inputId, endpoint, type) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener("change", async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const previewArea = document.getElementById("import-preview-area");
+      previewArea.innerHTML = `<p style="color:var(--text-muted);font-size:var(--text-sm)">Analysing ${file.name}…</p>`;
+      previewArea.style.display = "block";
+
+      // Preview first
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("preview", "true");
+      try {
+        const res  = await fetch(endpoint, { method:"POST", body:fd });
+        const data = await res.json();
+        showImportPreview(data, file, endpoint, type);
+      } catch(err) {
+        previewArea.innerHTML = `<p style="color:var(--tertiary)">⚠️ Could not parse file: ${err.message}</p>`;
+      }
+      input.value = ""; // reset input
+    });
+  }
+
+  function showImportPreview(data, file, endpoint, type) {
+    const area = document.getElementById("import-preview-area");
+    const rows = data.rows || [];
+    const errs = data.errors || [];
+
+    const newRows    = rows.filter(r => r.status === "new"    || r.from_status === "found");
+    const updateRows = rows.filter(r => r.status === "update");
+    const badRows    = errs;
+
+    area.innerHTML = `
+      <div style="background:var(--surface-card);border-radius:var(--radius-lg);padding:var(--sp-5);box-shadow:var(--shadow-ambient)">
+        <div style="font-family:var(--font-brand);font-size:var(--text-base);font-weight:700;margin-bottom:var(--sp-4);color:var(--text-primary)">
+          Import Preview — ${file.name}
+        </div>
+        <div style="display:flex;gap:var(--sp-4);margin-bottom:var(--sp-4);flex-wrap:wrap">
+          <div style="padding:var(--sp-2) var(--sp-4);background:var(--secondary-muted);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--secondary);font-weight:600">
+            ✅ ${type==="people" ? newRows.length+" new" : rows.filter(r=>r.from_status==="found"&&r.to_status==="found").length+" valid"} rows
+          </div>
+          ${updateRows.length ? `<div style="padding:var(--sp-2) var(--sp-4);background:var(--primary-muted);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--primary);font-weight:600">✏️ ${updateRows.length} updates</div>` : ""}
+          ${badRows.length ? `<div style="padding:var(--sp-2) var(--sp-4);background:rgba(166,48,71,0.1);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--tertiary);font-weight:600">⚠️ ${badRows.length} errors</div>` : ""}
+        </div>
+        ${badRows.length ? `<div style="background:rgba(166,48,71,0.08);border-radius:var(--radius-sm);padding:var(--sp-3);margin-bottom:var(--sp-3);font-size:var(--text-xs);color:var(--tertiary)">${badRows.map(e=>`Row ${e.row}: ${e.error}`).join("<br/>")}</div>` : ""}
+        <div style="max-height:200px;overflow-y:auto;margin-bottom:var(--sp-4);border:1px solid var(--outline-variant);border-radius:var(--radius-sm)">
+          <table style="width:100%;border-collapse:collapse;font-size:var(--text-xs)">
+            <thead style="background:var(--surface-low);position:sticky;top:0">
+              <tr>${Object.keys(rows[0]||{}).filter(k=>k!=="status"&&k!=="row").map(k=>`<th style="padding:6px 10px;text-align:left;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em">${k}</th>`).join("")}<th style="padding:6px 10px">Status</th></tr>
+            </thead>
+            <tbody>
+              ${rows.slice(0,50).map(r=>`<tr style="border-top:1px solid var(--outline-variant)">
+                ${Object.entries(r).filter(([k])=>k!=="status"&&k!=="row").map(([,v])=>`<td style="padding:6px 10px;color:var(--text-primary)">${v||""}</td>`).join("")}
+                <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:9999px;font-size:10px;font-weight:700;background:${r.status==="new"||r.from_status==="found"?"var(--secondary-muted)":"var(--primary-muted)"};color:${r.status==="new"||r.from_status==="found"?"var(--secondary)":"var(--primary)"}">${r.status||"import"}</span></td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:var(--sp-3)">
+          <button class="btn-primary" id="confirm-import-btn">
+            <span class="material-symbols-outlined">upload</span>Confirm Import
+          </button>
+          <button class="btn-ghost" onclick="document.getElementById('import-preview-area').style.display='none'">Cancel</button>
+        </div>
+      </div>`;
+
+    document.getElementById("confirm-import-btn").addEventListener("click", async () => {
+      const fd2 = new FormData();
+      fd2.append("file", file);
+      fd2.append("preview", "false");
+      const btn = document.getElementById("confirm-import-btn");
+      btn.disabled = true; btn.textContent = "Importing…";
+      try {
+        const res2  = await fetch(endpoint, { method:"POST", body:fd2 });
+        const data2 = await res2.json();
+        const count = data2.imported || 0;
+        HN.toast(`✅  Imported ${count} ${type} successfully`);
+        area.style.display = "none";
+      } catch(err) { HN.toast(`⚠️  Import failed: ${err.message}`); }
+      finally { btn.disabled=false; }
+    });
+  }
+
+  setupImport("people-csv-input", "/api/import/people", "people");
+  setupImport("conn-csv-input", "/api/import/connections", "connections");
 
   await loadCompanies();
 })();

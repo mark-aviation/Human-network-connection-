@@ -72,9 +72,24 @@
   </ul></nav>
   <div class="nav-actions">
     <button class="nav-btn" id="theme-btn"><span class="material-symbols-outlined" id="theme-icon">dark_mode</span></button>
+    {% if current_user %}
+    <span class="role-badge {{ current_user.role }}">{{ current_user.role }}</span>
+    <div class="nav-avatar" title="{{ current_user.username }}">{{ current_user.username[:2].upper() }}</div>
+    <a href="/auth/logout" class="nav-logout"><span class="material-symbols-outlined">logout</span><span class="logout-label">Out</span></a>
+    {% else %}
     <div class="nav-avatar">YO</div>
+    {% endif %}
+    <button class="nav-hamburger" id="hamburger-btn" aria-label="Menu">
+      <span class="material-symbols-outlined">menu</span>
+    </button>
   </div>
 </header>
+<nav class="mobile-nav-drawer" id="mobile-drawer">
+  <a class="mobile-nav-link" href="/"><span class="material-symbols-outlined">hub</span>Network Map</a>
+  <a class="mobile-nav-link active" href="/directory"><span class="material-symbols-outlined">people</span>Directory</a>
+  <a class="mobile-nav-link" href="/insights"><span class="material-symbols-outlined">insights</span>Insights</a>
+  <a class="mobile-nav-link" href="/settings"><span class="material-symbols-outlined">settings</span>Settings</a>
+</nav>
 
 <main class="page-wrap">
   <div class="dir-header">
@@ -121,6 +136,55 @@
 </main>
 
 <div class="toast" id="toast"></div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal-card" style="max-width:400px;text-align:center;">
+    <span class="material-symbols-outlined" style="font-size:48px;color:#e05a72;display:block;margin-bottom:var(--sp-4)">delete_forever</span>
+    <h2 class="modal-title" style="margin-bottom:var(--sp-2)">Delete Person?</h2>
+    <p id="delete-msg" style="color:var(--text-muted);font-size:var(--text-sm);margin-bottom:var(--sp-6);line-height:1.6"></p>
+    <div style="display:flex;gap:var(--sp-3);justify-content:center;">
+      <button class="btn-ghost" id="delete-cancel" style="min-width:100px">Cancel</button>
+      <button class="btn-danger" id="delete-confirm" style="min-width:100px;padding:var(--sp-3) var(--sp-5)">
+        <span class="material-symbols-outlined" style="font-size:16px">delete</span>Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Person Modal -->
+<div class="modal-overlay" id="dir-edit-modal">
+  <div class="modal-card" style="max-width:480px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-6);">
+      <h2 class="modal-title" style="margin-bottom:0">Edit Person</h2>
+      <div id="dir-edit-avatar" style="width:48px;height:48px;border-radius:9999px;background:var(--primary-muted);display:flex;align-items:center;justify-content:center;font-family:var(--font-brand);font-size:var(--text-sm);font-weight:800;color:var(--primary);overflow:hidden;border:2px solid var(--primary-border);"></div>
+    </div>
+    <form id="dir-edit-form" novalidate>
+      <input type="hidden" id="dir-edit-id"/>
+      <div class="form-row"><label class="form-label">Full Name *</label><input class="form-input" type="text" id="dir-edit-name" required/></div>
+      <div class="form-row"><label class="form-label">Job Title *</label><input class="form-input" type="text" id="dir-edit-title" required/></div>
+      <div class="form-row"><label class="form-label">Department *</label><input class="form-input" type="text" id="dir-edit-dept" required/></div>
+      <div class="form-row"><label class="form-label">Company</label>
+        <select class="form-select" id="dir-edit-company"><option value="">— No company —</option></select>
+      </div>
+      <div class="form-row"><label class="form-label">Node Tier</label>
+        <select class="form-select" id="dir-edit-tier">
+          <option value="contributor">Contributor</option>
+          <option value="manager">Manager</option>
+          <option value="executive">Executive</option>
+        </select>
+      </div>
+      <div class="form-row"><label class="form-label">Email</label><input class="form-input" type="email" id="dir-edit-email"/></div>
+      <div class="form-row"><label class="form-label">Persona / Bio</label><textarea class="form-textarea" id="dir-edit-persona"></textarea></div>
+      <div class="form-row"><label class="form-label">Hobbies (comma-separated)</label><input class="form-input" type="text" id="dir-edit-hobbies"/></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="dir-edit-cancel">Cancel</button>
+        <button type="submit" class="btn-primary"><span class="material-symbols-outlined">save</span>Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="/static/js/base.js"></script>
 <script>
 (async function(){
@@ -180,14 +244,25 @@
       const col = coColor(p);
       const co  = companies.find(c=>c.id===p.company_id);
       return `
-      <div class="person-card" onclick="openProfile(${p.id})">
-        <div class="card-avatar">${avatarHTML(p)}</div>
-        <div class="card-name">${p.name}</div>
+      <div class="person-card">
+        <div class="card-avatar" onclick="openProfile(${p.id})" style="cursor:pointer">${avatarHTML(p)}</div>
+        <div class="card-name" onclick="openProfile(${p.id})" style="cursor:pointer">${p.name}</div>
         <div class="card-title">${p.title}</div>
         ${co ? `<div class="card-co" style="border-color:${col.stroke};color:${col.label};background:${col.fill}">${co.name}</div>` : ""}
         <div class="card-footer">
           <div class="card-tag">${p.department}</div>
           <div class="card-tag badge-${p.tier}">${p.tier}</div>
+        </div>
+        <div style="display:flex;gap:6px;width:100%;margin-top:var(--sp-3)">
+          <button class="btn-ghost" style="flex:1;font-size:var(--text-xs);padding:6px" onclick="openProfile(${p.id})">
+            <span class="material-symbols-outlined" style="font-size:14px">open_in_new</span>View
+          </button>
+          <button class="btn-ghost" style="flex:1;font-size:var(--text-xs);padding:6px" onclick="openEdit(${p.id})">
+            <span class="material-symbols-outlined" style="font-size:14px">edit</span>Edit
+          </button>
+          <button class="btn-danger" style="padding:6px 8px" onclick="confirmDelete(${p.id},'${p.name.replace(/'/g,"\\'")}')">
+            <span class="material-symbols-outlined" style="font-size:14px">delete</span>
+          </button>
         </div>
       </div>`;
     }).join("");
@@ -199,15 +274,21 @@
       const col = coColor(p);
       const co  = companies.find(c=>c.id===p.company_id);
       return `
-      <div class="list-item" onclick="openProfile(${p.id})">
-        <div class="list-avatar">${avatarHTML(p,44)}</div>
-        <div class="list-info">
+      <div class="list-item">
+        <div class="list-avatar" onclick="openProfile(${p.id})" style="cursor:pointer">${avatarHTML(p,44)}</div>
+        <div class="list-info" onclick="openProfile(${p.id})" style="cursor:pointer;flex:1">
           <div class="list-name">${p.name}</div>
           <div class="list-meta">${p.title} · ${p.department}${co?` · ${co.name}`:""}</div>
         </div>
         <div class="list-right">
           <span class="badge badge-${p.tier}">${p.tier}</span>
           ${p.email?`<a href="mailto:${p.email}" onclick="event.stopPropagation()" class="btn-ghost" style="padding:4px 10px;font-size:var(--text-xs)"><span class="material-symbols-outlined" style="font-size:14px">mail</span>Email</a>`:""}
+          <button class="btn-ghost" style="padding:6px 10px;font-size:var(--text-xs)" onclick="openEdit(${p.id})">
+            <span class="material-symbols-outlined" style="font-size:14px">edit</span>Edit
+          </button>
+          <button class="btn-danger" style="padding:6px 8px" onclick="confirmDelete(${p.id},'${p.name.replace(/'/g,"\\'")}')">
+            <span class="material-symbols-outlined" style="font-size:14px">delete</span>
+          </button>
         </div>
       </div>`;
     }).join("");
@@ -231,6 +312,133 @@
   window.openProfile = function(id) {
     window.location.href = `/?person=${id}`;
   };
+
+  window.openEdit = function(id) {
+    const p = people.find(x => x.id === id);
+    if (!p) return;
+
+    // Fill edit modal
+    document.getElementById("dir-edit-id").value      = p.id;
+    document.getElementById("dir-edit-name").value    = p.name;
+    document.getElementById("dir-edit-title").value   = p.title;
+    document.getElementById("dir-edit-dept").value    = p.department;
+    document.getElementById("dir-edit-email").value   = p.email || "";
+    document.getElementById("dir-edit-persona").value = p.persona || "";
+    document.getElementById("dir-edit-hobbies").value = (p.hobbies || []).join(", ");
+    document.getElementById("dir-edit-tier").value    = p.tier || "contributor";
+
+    // Populate company dropdown
+    const sel = document.getElementById("dir-edit-company");
+    sel.innerHTML = '<option value="">— No company —</option>';
+    companies.forEach(c => {
+      const o = document.createElement("option");
+      o.value = c.id; o.textContent = c.name;
+      if (c.id === p.company_id) o.selected = true;
+      sel.appendChild(o);
+    });
+
+    // Avatar preview
+    const prev = document.getElementById("dir-edit-avatar");
+    prev.innerHTML = p.image
+      ? `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;" alt="${p.name}"/>`
+      : HN.initials(p.name);
+
+    document.getElementById("dir-edit-modal").classList.add("open");
+    setTimeout(() => document.getElementById("dir-edit-name").focus(), 150);
+  };
+
+  // Edit form submit
+  document.getElementById("dir-edit-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const id  = document.getElementById("dir-edit-id").value;
+    const btn = e.target.querySelector("[type=submit]");
+    btn.disabled = true; btn.textContent = "Saving…";
+
+    const data = {
+      name:                document.getElementById("dir-edit-name").value.trim(),
+      title:               document.getElementById("dir-edit-title").value.trim(),
+      department:          document.getElementById("dir-edit-dept").value.trim(),
+      email:               document.getElementById("dir-edit-email").value.trim() || null,
+      persona_description: document.getElementById("dir-edit-persona").value.trim() || null,
+      hobbies:             document.getElementById("dir-edit-hobbies").value.trim() || null,
+      node_tier:           document.getElementById("dir-edit-tier").value,
+      company_id:          document.getElementById("dir-edit-company").value ? parseInt(document.getElementById("dir-edit-company").value) : null,
+    };
+
+    try {
+      await HN.api.put(`/api/employees/${id}`, data);
+      HN.toast(`✅  ${data.name} updated`);
+      document.getElementById("dir-edit-modal").classList.remove("open");
+      // Refresh people list
+      people = await HN.api.get("/api/employees");
+      renderAll(getFiltered());
+    } catch(err) { HN.toast(`⚠️  ${err.message}`); }
+    finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-symbols-outlined">save</span>Save Changes';
+    }
+  });
+
+  // ── API helper that handles session expiry ──
+  const _apiFetch = async (method, url, data) => {
+    const opts = { method, headers: {} };
+    if (data) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(data); }
+    const r = await fetch(url, opts);
+    if (r.status === 401) { window.location.href = "/auth/login"; return null; }
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || `HTTP ${r.status}`); }
+    return r.json();
+  };
+
+  // ── Delete person ──────────────────────────
+  let _deleteId = null;
+
+  window.confirmDelete = function(id, name) {
+    _deleteId = id;
+    document.getElementById("delete-msg").textContent =
+      `Are you sure you want to delete "${name}"? This will permanently remove them and all their connections.`;
+    document.getElementById("delete-modal").classList.add("open");
+  };
+
+  document.getElementById("delete-cancel").addEventListener("click", () => {
+    document.getElementById("delete-modal").classList.remove("open");
+    _deleteId = null;
+  });
+
+  document.getElementById("delete-confirm").addEventListener("click", async () => {
+    if (!_deleteId) return;
+    const btn = document.getElementById("delete-confirm");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">hourglass_top</span>Deleting…';
+    try {
+      const result = await _apiFetch("DELETE", `/api/employees/${_deleteId}`);
+      if (!result) return; // redirected to login
+      HN.toast("✅  Person deleted");
+      document.getElementById("delete-modal").classList.remove("open");
+      people = people.filter(p => p.id !== _deleteId);
+      _deleteId = null;
+      renderAll(getFiltered());
+    } catch(err) {
+      HN.toast(`⚠️  ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">delete</span>Delete';
+    }
+  });
+
+  document.getElementById("delete-modal").addEventListener("click", e => {
+    if (e.target === document.getElementById("delete-modal")) {
+      document.getElementById("delete-modal").classList.remove("open");
+      _deleteId = null;
+    }
+  });
+
+  document.getElementById("dir-edit-cancel").addEventListener("click", () => {
+    document.getElementById("dir-edit-modal").classList.remove("open");
+  });
+  document.getElementById("dir-edit-modal").addEventListener("click", e => {
+    if (e.target === document.getElementById("dir-edit-modal"))
+      document.getElementById("dir-edit-modal").classList.remove("open");
+  });
 })();
 </script>
 </body>

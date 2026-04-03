@@ -73,16 +73,52 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeBtn = document.getElementById("theme-btn");
   if (themeBtn) themeBtn.addEventListener("click", HN.toggleTheme);
 
-  // Smooth nav transitions
+  // Smooth nav transitions (theme-aware — no flash bang)
   document.querySelectorAll(".nav-links a").forEach(a => {
     a.addEventListener("click", e => {
       const href = a.getAttribute("href");
       if (href && href !== "#" && !href.startsWith("http")) {
         e.preventDefault();
-        document.body.style.opacity = "0";
-        document.body.style.transition = "opacity 0.15s ease";
-        setTimeout(() => { window.location.href = href; }, 150);
+        const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+        // Overlay with the correct surface colour so there's no white flash in dark mode
+        const overlay = document.createElement("div");
+        overlay.style.cssText = [
+          "position:fixed", "inset:0", "z-index:9999",
+          `background:${isDark ? "#0d1117" : "#ffffff"}`,
+          "opacity:0", "pointer-events:none",
+          "transition:opacity 0.18s ease"
+        ].join(";");
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => { overlay.style.opacity = "1"; });
+        setTimeout(() => { window.location.href = href; }, 200);
       }
     });
+  });
+});
+
+// ── Hamburger menu (all pages except index which has its own) ──
+document.addEventListener("DOMContentLoaded", () => {
+  const hamburger = document.getElementById("hamburger-btn");
+  const drawer    = document.getElementById("mobile-drawer");
+  if (!hamburger || !drawer) return;
+  // Only attach if not already attached by network.js
+  if (hamburger.dataset.bound) return;
+  hamburger.dataset.bound = "1";
+  hamburger.addEventListener("click", e => {
+    e.stopPropagation();
+    drawer.classList.toggle("open");
+    hamburger.querySelector(".material-symbols-outlined").textContent =
+      drawer.classList.contains("open") ? "close" : "menu";
+  });
+  drawer.querySelectorAll("a").forEach(a => a.addEventListener("click", () => {
+    drawer.classList.remove("open");
+    hamburger.querySelector(".material-symbols-outlined").textContent = "menu";
+  }));
+  // Close on outside tap
+  document.addEventListener("click", e => {
+    if (!drawer.contains(e.target) && e.target !== hamburger) {
+      drawer.classList.remove("open");
+      hamburger.querySelector(".material-symbols-outlined").textContent = "menu";
+    }
   });
 });
