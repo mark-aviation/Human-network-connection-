@@ -367,6 +367,71 @@ const HNUi = (() => {
   if (editConnCancel) editConnCancel.addEventListener("click", () => editConnModal.classList.remove("open"));
   if (eventCancel) eventCancel.addEventListener("click", () => eventModal.classList.remove("open"));
 
+  // ── ADD PERSON MODAL ────────────────────────
+  function openAddModal() {
+    addForm.reset();
+    fileInput.value = "";
+    uploadPrev.style.display = "none";
+    uploadPh.style.display = "block";
+
+    // Clear previous submission handler
+    addForm.onsubmit = null;
+
+    // Attach submission handler
+    addForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = addForm.querySelector("[type=submit]");
+      btn.disabled = true;
+
+      try {
+        const formData = new FormData(addForm);
+
+        const response = await fetch("/api/employees", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error ${response.status}`);
+        }
+
+        const emp = await response.json();
+        HN.toast(`✅  ${emp.name} added`);
+        addModal.classList.remove("open");
+        addForm.reset();
+        
+        // Reload graph to show new employee
+        if (window.load) window.load();
+      } catch (err) {
+        HN.toast(`⚠️  ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    addModal.classList.add("open");
+  }
+
+  // Wire add button
+  if (addPersonBtn) addPersonBtn.addEventListener("click", openAddModal);
+
+  // ── File Upload Preview ─────────────────
+  if (fileInput) {
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          uploadPrev.src = ev.target.result;
+          uploadPrev.style.display = "block";
+          uploadPh.style.display = "none";
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
   // ── Search & Filter ─────────────────────
   function setupSearch(nodeLayer) {
     if (!searchInput || !nodeLayer) return;
@@ -685,6 +750,7 @@ const HNUi = (() => {
     fillPanel,
     switchTab,
     showContextMenu,
+    openAddModal,
     openEditModal,
     openConnectModal,
     openEditConnModal,
