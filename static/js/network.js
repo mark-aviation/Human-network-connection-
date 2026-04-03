@@ -51,6 +51,18 @@
       G = await HN.api.get("/api/graph");
       render(G);
       fillCoSelect(G.companies);
+      
+      // ── Phase 3: Initialize time machine slider ──────────
+      if (HNFeatures && HNFeatures.initTimeMachineSlider) {
+        setTimeout(() => {
+          const nodeLayer = d3.select(svg).select("g.nodes");
+          const edgeLayer = d3.select(svg).select("g.edges");
+          const crossLayer = d3.select(svg).select("g.cross");
+          HNFeatures.initTimeMachineSlider("graph-canvas", G.nodes, 
+            [...G.edges.formal, ...G.edges.informal, ...G.edges.cross_company],
+            nodeLayer, edgeLayer, crossLayer, orgOverlay);
+        }, 100);
+      }
     } catch(e) { HN.toast("⚠️  Could not load network."); }
   }
 
@@ -260,6 +272,11 @@
     // Staggered reveal animation
     nodeElems.transition().duration(400).delay((_,i)=>i*40).attr("opacity",1);
 
+    // ── Phase 3: Enable keyboard navigation ─────────────
+    if (HNFeatures && HNFeatures.initKeyboardNavigation) {
+      HNFeatures.initKeyboardNavigation(nodeLayer, fillPanel);
+    }
+
     // Attach right-click context menu
     attachContextMenu(nodeElems);
 
@@ -321,6 +338,11 @@
 
       bubElems[co.id] = bp; lblElems[co.id] = bl;
     });
+
+    // ── Phase 3: Apply dynamic text contrast to company labels (WCAG) ──
+    if (HNFeatures && HNFeatures.applyDynamicContrast) {
+      HNFeatures.applyDynamicContrast(bubbleLayer, companies);
+    }
 
     // ── Tick ─────────────────────────────────
     sim.on("tick", () => {
@@ -643,6 +665,16 @@
         e.stopPropagation();
         if (!confirm(`Remove connection between ${d.name} and ${r.other.name}?`)) return;
         try {
+          // ── Phase 4: Animate line deletion with rubber-band effect ──
+          const edgeElems = d3.select(svg).selectAll(".edges path, .cross path");
+          let targetElem = null;
+          edgeElems.each(function(edge) {
+            if (edge && edge.id === r.id) targetElem = this;
+          });
+          if (targetElem && HNFeatures && HNFeatures.rubberBandDelete) {
+            await HNFeatures.rubberBandDelete(targetElem, 600);
+          }
+          
           await HN.api.del(`/api/relationships/${r.id}`);
           HN.toast("Connection removed");
           G = await HN.api.get("/api/graph");
@@ -1076,6 +1108,14 @@
       const res=await fetch("/api/employees",{method:"POST",body:new FormData(addForm)});
       if(!res.ok) throw new Error((await res.json()).error||"Error");
       const emp=await res.json(); HN.toast(`✅  ${emp.name} added`); closeAdd(); await load();
+      
+      // Apply bloop entrance animation to new node
+      if (HNFeatures && HNFeatures.bloopEntrance) {
+        const newNodeCircle = nodeLayer.selectAll("circle").filter(d => d.id === emp.id).node();
+        if (newNodeCircle) {
+          await HNFeatures.bloopEntrance(newNodeCircle, 0);
+        }
+      }
     } catch(err){ HN.toast(`⚠️  ${err.message}`); }
     finally{ btn.disabled=false; btn.innerHTML='<span class="material-symbols-outlined">add_circle</span>Add to Network'; }
   });
