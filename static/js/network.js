@@ -96,7 +96,8 @@
     window._hnEdgeElems = edgeElems;
     window._hnCrossElems = crossElems;
     window._hnInternalLinks = internalLinks;
-    window._hnLineState = { formal: false, informal: false, cross_company: false };
+    // Show formal edges by default, toggle others off
+    window._hnLineState = { formal: true, informal: false, cross_company: false };
     _applyLineToggle();
 
     // Render nodes

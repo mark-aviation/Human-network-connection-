@@ -118,12 +118,21 @@ const D3Renderer = (() => {
       // Name label
       nodeElems.append("text").attr("text-anchor", "middle")
         .attr("dy", d => TIER_R[d.tier] + 16).attr("class", "node-label")
-        .attr("pointer-events", "none").text(d => d.name);
+        .attr("pointer-events", "none")
+        .attr("fill", "#131b2e")
+        .attr("font-family", "'Manrope',sans-serif")
+        .attr("font-size", "12")
+        .attr("font-weight", "600")
+        .text(d => d.name);
 
       // Title/role
       nodeElems.append("text").attr("text-anchor", "middle")
         .attr("dy", d => TIER_R[d.tier] + 30).attr("class", "node-sublabel")
-        .attr("pointer-events", "none").text(d => d.title);
+        .attr("pointer-events", "none")
+        .attr("fill", "#8795a3")
+        .attr("font-family", "'Manrope',sans-serif")
+        .attr("font-size", "10")
+        .text(d => d.title);
 
       // Hover glow (invisible initially)
       nodeElems.append("circle").attr("class", "nglow")
