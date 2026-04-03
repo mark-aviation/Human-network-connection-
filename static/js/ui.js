@@ -744,7 +744,7 @@ const HNUi = (() => {
   }
 
   // ── Public API ──
-  return {
+  const publicAPI = {
     openPanel,
     closePanel,
     fillPanel,
@@ -765,4 +765,6 @@ const HNUi = (() => {
       }
     },
   };
+  window.HNUi = publicAPI;
+  return publicAPI;
 })();

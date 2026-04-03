@@ -24,18 +24,12 @@
   /* ── MAIN INIT ──────────────────────────── */
   async function load() {
     try {
-      console.log("[load] Starting...");
       G = await GraphController.loadGraph();
-      console.log("[load] Graph loaded:", G.nodes.length, "nodes,", G.companies.length, "companies");
-      
       GraphController.cacheFocusElements();
       focusPicker   = document.getElementById("focus-picker");
       focusExitPill = document.getElementById("focus-exit-pill");
       
-      console.log("[load] Calling render...");
       render(G);
-      console.log("[load] Render complete");
-      
       fillCoSelect(G.companies);
       
       // ── Phase 3: Initialize time machine slider ──────────
@@ -49,10 +43,7 @@
             nl, el, cl, document.getElementById("org-overlay"));
         }, 100);
       }
-    } catch(e) { 
-      console.error("[load] Error:", e);
-      HN.toast("⚠️  Could not load network.");
-    }
+    } catch(e) { HN.toast("⚠️  Could not load network."); }
   }
 
   function fillCoSelect(cos) {
@@ -471,58 +462,7 @@
       showFocusPicker(event, d);
     });
 
-    // ── Company bubbles ──────────────────────
-    const bubElems = {}, lblElems = {};
-    companies.forEach(co => {
-      const col = co.color;
-      const bg  = bubbleLayer.append("g").attr("class","co-group").attr("data-id",co.id);
-
-      const bp  = bg.append("path").attr("fill",col.fill)
-        .attr("stroke",col.stroke).attr("stroke-width",1.5)
-        .attr("stroke-dasharray", null).attr("opacity",.85)
-        .style("cursor","grab")
-        .on("mouseenter",function(){ d3.select(this).transition().duration(160).attr("stroke-width",3.5).attr("fill",col.fill.replace("0.07","0.13")); })
-        .on("mouseleave",function(){ d3.select(this).transition().duration(220).attr("stroke-width",2).attr("fill",col.fill); })
-        .on("dblclick",(e)=>{ e.stopPropagation(); openOrg(co.id); })
-        .call(d3.drag()
-          .on("start", function(event) {
-            event.sourceEvent.stopPropagation();
-            d3.select(this).style("cursor","grabbing");
-            // Freeze all members in place so they move as a unit
-            live.filter(n => n.company_id === co.id).forEach(n => { n.fx = n.x; n.fy = n.y; });
-            if (sim) sim.alphaTarget(0).stop(); // stop physics while dragging bubble
-          })
-          .on("drag", function(event) {
-            const dx = event.dx, dy = event.dy;
-            // Move every member node by the same delta
-            live.filter(n => n.company_id === co.id).forEach(n => {
-              n.x  += dx; n.y  += dy;
-              n.fx += dx; n.fy += dy;
-            });
-            // Immediately repaint without waiting for tick
-            nodeLayer.selectAll("g.node")
-              .filter(d => d.company_id === co.id)
-              .attr("transform", d => `translate(${d.x},${d.y})`);
-            updateBubble(co, live, bubElems, lblElems);
-            // Update edges live
-            edgeLayer.selectAll("path").attr("d", internalPath);
-            crossLayer.selectAll("path").attr("d", crossPath);
-          })
-          .on("end", function() {
-            d3.select(this).style("cursor","grab");
-            // Keep nodes pinned where user dropped them — don't release fx/fy
-            // so the cluster stays put after dragging
-            if (sim) sim.alphaTarget(0).restart();
-          })
-        );
-
-      const bl = bg.append("text").attr("class","co-label")
-        .attr("fill",col.label).attr("text-anchor","middle")
-        .attr("pointer-events","none").attr("opacity",.85).text(co.name);
-
-      bubElems[co.id] = bp; lblElems[co.id] = bl;
-    });
-
+    // Company bubbles and interactions already rendered by D3Renderer.renderCompanies() above
     // ── Phase 3: Apply dynamic text contrast to company labels (WCAG) ──
     if (HNFeatures && HNFeatures.applyDynamicContrast) {
       HNFeatures.applyDynamicContrast(bubbleLayer, companies);
