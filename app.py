@@ -29,6 +29,28 @@ def _log_event(employee_id, event_type, description, db_session, extra_data=None
         pass  # Never let logging break the main operation
 
 
+def _error_response(message, status_code=400):
+    """
+    Standardized error response format.
+    All API errors follow: {"error": "message"}
+    
+    Args:
+        message: Human-readable error message
+        status_code: HTTP status code (400, 401, 403, 404, 409, 422, 500)
+    
+    Returns:
+        Tuple of (jsonify response, status_code)
+    """
+    return jsonify({"error": str(message)}), status_code
+
+
+def _success_response(data, status_code=200):
+    """Standardized success response - returns data directly or wrapped."""
+    if isinstance(data, dict) and "error" not in data:
+        return jsonify(data), status_code
+    return jsonify(data), status_code
+
+
 def create_app(config=None):
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.update(
@@ -166,7 +188,7 @@ def _register_routes(app):
     def create_employee():
         required = ["name", "title", "department"]
         missing  = [f for f in required if not request.form.get(f, "").strip()]
-        if missing: return jsonify({"error": f"Missing: {', '.join(missing)}"}), 400
+        if missing: return _error_response(f"Missing required fields: {', '.join(missing)}", 422)
         img = _save_upload(request.files.get("profile_image"), app)
         e = Employee(
             name=request.form["name"].strip(), title=request.form["title"].strip(),
@@ -223,7 +245,7 @@ def _register_routes(app):
     def upload_image(eid):
         e = Employee.query.get_or_404(eid)
         file = request.files.get("profile_image")
-        if not file or not file.filename: return jsonify({"error": "No file"}), 400
+        if not file or not file.filename: return _error_response("No file provided", 400)
         if e.profile_image:
             old = app.config["UPLOAD_FOLDER"] / e.profile_image
             if old.exists(): old.unlink()
@@ -240,7 +262,7 @@ def _register_routes(app):
     @app.route("/api/companies", methods=["POST"])
     def create_company():
         data = request.get_json(force=True)
-        if not data.get("name","").strip(): return jsonify({"error": "name required"}), 400
+        if not data.get("name","").strip(): return _error_response("Company name is required", 422)
         co = Company(
             name=data["name"].strip(), industry=data.get("industry","").strip() or None,
             description=data.get("description","").strip() or None,
@@ -272,7 +294,7 @@ def _register_routes(app):
     def create_relationship():
         data = request.get_json(force=True)
         if not data.get("source_id") or not data.get("target_id"):
-            return jsonify({"error": "source_id and target_id required"}), 400
+            return _error_response("Both source_id and target_id are required", 422)
         Employee.query.get_or_404(data["source_id"])
         Employee.query.get_or_404(data["target_id"])
 
@@ -292,7 +314,7 @@ def _register_routes(app):
         )
         db.session.add(rel)
         try: db.session.commit()
-        except: db.session.rollback(); return jsonify({"error": "Already exists or invalid"}), 409
+        except Exception as e: db.session.rollback(); return _error_response("Relationship already exists or data is invalid", 409)
 
         # Log connection event for both people
         src = Employee.query.get(rel.source_id)
@@ -336,7 +358,7 @@ def _register_routes(app):
         Employee.query.get_or_404(eid)
         data = request.get_json(force=True)
         if not data.get("description","").strip():
-            return jsonify({"error": "description required"}), 400
+            return _error_response("Event description is required", 422)
         ev = EventLog(
             employee_id=eid,
             event_type=data.get("event_type","note"),
@@ -709,7 +731,7 @@ def _register_routes(app):
     def import_people():
         file = request.files.get("file")
         if not file or not file.filename.endswith(".csv"):
-            return jsonify({"error": "Please upload a .csv file"}), 400
+            return _error_response("Please upload a valid CSV file", 400)
 
         preview_only = request.form.get("preview", "true").lower() == "true"
         base = app.config["IMAGE_URL_BASE"]
@@ -787,7 +809,7 @@ def _register_routes(app):
     def import_connections():
         file = request.files.get("file")
         if not file or not file.filename.endswith(".csv"):
-            return jsonify({"error": "Please upload a .csv file"}), 400
+            return _error_response("Please upload a valid CSV file", 400)
 
         preview_only = request.form.get("preview", "true").lower() == "true"
         stream  = io.StringIO(file.stream.read().decode("utf-8-sig"))
@@ -911,10 +933,15 @@ def _register_routes(app):
         return jsonify(sorted(all_tags))
 
     @app.errorhandler(RequestEntityTooLarge)
-    def too_large(_): return jsonify({"error": "File > 5MB"}), 413
+    def too_large(_): return _error_response("File exceeds maximum size of 5MB", 413)
 
     @app.errorhandler(404)
-    def not_found(_): return jsonify({"error": "Not found"}), 404
+    def not_found(_): return _error_response("Resource not found", 404)
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        db.session.rollback()
+        return _error_response("An unexpected server error occurred. Please try again later.", 500)
 
 
 def _allowed_file(filename, allowed):
