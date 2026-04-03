@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Settings — The Human Network</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/base.css"/>
+  <style>
+    .page-wrap{padding:calc(var(--header-h)+var(--sp-8)) 0 var(--sp-12);display:flex;gap:0;min-height:100vh;}
+    /* Sidebar */
+    .settings-nav{width:220px;flex-shrink:0;padding:var(--sp-6) var(--sp-4);position:sticky;top:var(--header-h);height:calc(100vh-var(--header-h));border-right:1px solid var(--outline-variant);overflow-y:auto;}
+    .settings-nav-title{font-size:var(--text-xs);font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-2);}
+    .settings-nav a{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3);border-radius:var(--radius-sm);font-size:var(--text-sm);font-weight:500;color:var(--text-secondary);text-decoration:none;transition:background var(--dur-fast),color var(--dur-fast);cursor:pointer;margin-bottom:2px;}
+    .settings-nav a:hover{background:var(--surface-low);color:var(--primary);}
+    .settings-nav a.active{background:var(--primary-muted);color:var(--primary);font-weight:700;}
+    .settings-nav a .material-symbols-outlined{font-size:18px;}
+    /* Content */
+    .settings-content{flex:1;padding:var(--sp-6) var(--sp-8);max-width:780px;}
+    .section{display:none;animation:pageIn var(--dur-mid) var(--ease-smooth) both;}
+    .section.active{display:block;}
+    .section-title{font-family:var(--font-brand);font-size:var(--text-xl);font-weight:800;color:var(--text-primary);letter-spacing:-.02em;margin-bottom:4px;}
+    .section-sub{color:var(--text-muted);font-size:var(--text-sm);margin-bottom:var(--sp-8);}
+    .settings-group{background:var(--surface-card);border-radius:var(--radius-lg);box-shadow:var(--shadow-ambient);margin-bottom:var(--sp-6);overflow:hidden;}
+    .settings-row{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--outline-variant);gap:var(--sp-4);}
+    .settings-row:last-child{border-bottom:none;}
+    .settings-row-info{flex:1;}
+    .settings-row-label{font-size:var(--text-base);font-weight:600;color:var(--text-primary);}
+    .settings-row-desc{font-size:var(--text-xs);color:var(--text-muted);margin-top:2px;}
+    /* Toggle switch */
+    .toggle{position:relative;width:44px;height:24px;flex-shrink:0;}
+    .toggle input{opacity:0;width:0;height:0;position:absolute;}
+    .toggle-slider{position:absolute;inset:0;background:var(--surface-high);border-radius:var(--radius-full);cursor:pointer;transition:background var(--dur-mid);}
+    .toggle-slider::before{content:'';position:absolute;width:18px;height:18px;left:3px;bottom:3px;background:white;border-radius:var(--radius-full);transition:transform var(--dur-mid);}
+    .toggle input:checked ~ .toggle-slider{background:var(--primary);}
+    .toggle input:checked ~ .toggle-slider::before{transform:translateX(20px);}
+    /* Theme picker */
+    .theme-options{display:flex;gap:var(--sp-3);}
+    .theme-opt{padding:var(--sp-2) var(--sp-4);border:2px solid var(--outline-variant);border-radius:var(--radius-md);cursor:pointer;font-size:var(--text-sm);font-weight:600;color:var(--text-secondary);display:flex;align-items:center;gap:var(--sp-2);transition:border-color var(--dur-fast),color var(--dur-fast);}
+    .theme-opt.active{border-color:var(--primary);color:var(--primary);}
+    /* Color swatches */
+    .color-swatches{display:flex;gap:var(--sp-2);}
+    .swatch{width:28px;height:28px;border-radius:var(--radius-full);cursor:pointer;border:3px solid transparent;transition:border-color var(--dur-fast),transform var(--dur-fast);}
+    .swatch:hover{transform:scale(1.15);}
+    .swatch.active{border-color:var(--text-primary);}
+    /* Companies section */
+    .co-list{display:flex;flex-direction:column;gap:var(--sp-3);margin-bottom:var(--sp-4);}
+    .co-item{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);background:var(--surface-card);border-radius:var(--radius-md);box-shadow:var(--shadow-ambient);}
+    .co-dot{width:16px;height:16px;border-radius:var(--radius-full);flex-shrink:0;}
+    .co-info{flex:1;min-width:0;}
+    .co-name{font-family:var(--font-brand);font-size:var(--text-base);font-weight:700;color:var(--text-primary);}
+    .co-meta{font-size:var(--text-xs);color:var(--text-muted);margin-top:2px;}
+    .co-actions{display:flex;gap:var(--sp-2);}
+    /* Export */
+    .export-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);}
+    .export-card{background:var(--surface-card);border-radius:var(--radius-lg);padding:var(--sp-5);box-shadow:var(--shadow-ambient);display:flex;flex-direction:column;gap:var(--sp-3);}
+    .export-icon{width:44px;height:44px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;}
+    .export-title{font-family:var(--font-brand);font-size:var(--text-base);font-weight:700;color:var(--text-primary);}
+    .export-desc{font-size:var(--text-xs);color:var(--text-muted);}
+    @keyframes pageIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  </style>
+</head>
+<body>
+<header class="nav-bar">
+  <a href="/" class="nav-logo">The Human Network</a>
+  <nav><ul class="nav-links">
+    <li><a href="/"><span class="material-symbols-outlined">hub</span>Network Map</a></li>
+    <li><a href="/directory"><span class="material-symbols-outlined">people</span>Directory</a></li>
+    <li><a href="/insights"><span class="material-symbols-outlined">insights</span>Insights</a></li>
+    <li><a href="/settings" class="active"><span class="material-symbols-outlined">settings</span>Settings</a></li>
+  </ul></nav>
+  <div class="nav-actions">
+    <button class="nav-btn" id="theme-btn"><span class="material-symbols-outlined" id="theme-icon">dark_mode</span></button>
+    <div class="nav-avatar">YO</div>
+  </div>
+</header>
+
+<div class="page-wrap">
+  <!-- Sidebar nav -->
+  <nav class="settings-nav">
+    <div class="settings-nav-title">Settings</div>
+    <a class="active" data-section="appearance"><span class="material-symbols-outlined">palette</span>Appearance</a>
+    <a data-section="companies"><span class="material-symbols-outlined">domain</span>Companies</a>
+    <a data-section="graph"><span class="material-symbols-outlined">hub</span>Graph Display</a>
+    <a data-section="data"><span class="material-symbols-outlined">database</span>Data & Export</a>
+  </nav>
+
+  <!-- Content -->
+  <div class="settings-content">
+
+    <!-- ── Appearance ── -->
+    <div class="section active" id="section-appearance">
+      <h2 class="section-title">Appearance</h2>
+      <p class="section-sub">Customise how The Human Network looks</p>
+
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Theme</div>
+            <div class="settings-row-desc">Choose between light, dark, or system preference</div>
+          </div>
+          <div class="theme-options">
+            <div class="theme-opt" data-theme="light"><span class="material-symbols-outlined" style="font-size:16px">light_mode</span>Light</div>
+            <div class="theme-opt" data-theme="dark"><span class="material-symbols-outlined" style="font-size:16px">dark_mode</span>Dark</div>
+            <div class="theme-opt" data-theme="system"><span class="material-symbols-outlined" style="font-size:16px">computer</span>System</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Companies ── -->
+    <div class="section" id="section-companies">
+      <h2 class="section-title">Companies</h2>
+      <p class="section-sub">Create and manage the organisations in your network</p>
+
+      <div class="co-list" id="co-list">
+        <div class="skeleton" style="height:70px;border-radius:var(--radius-md)"></div>
+        <div class="skeleton" style="height:70px;border-radius:var(--radius-md)"></div>
+      </div>
+
+      <button class="btn-primary" id="add-co-btn">
+        <span class="material-symbols-outlined">add</span>Add Company
+      </button>
+    </div>
+
+    <!-- ── Graph Display ── -->
+    <div class="section" id="section-graph">
+      <h2 class="section-title">Graph Display</h2>
+      <p class="section-sub">Control what appears on the network map</p>
+
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Show node labels</div>
+            <div class="settings-row-desc">Display names and titles below each node</div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-labels" checked/><span class="toggle-slider"></span></label>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Show cross-company lines</div>
+            <div class="settings-row-desc">Show the gold dashed lines between companies</div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-cross" checked/><span class="toggle-slider"></span></label>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Show company bubbles</div>
+            <div class="settings-row-desc">Show the organisation boundary blobs</div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-bubbles" checked/><span class="toggle-slider"></span></label>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Animate cross-company lines</div>
+            <div class="settings-row-desc">Flowing pulse animation on inter-org connections</div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-anim" checked/><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Data & Export ── -->
+    <div class="section" id="section-data">
+      <h2 class="section-title">Data & Export</h2>
+      <p class="section-sub">Download your network data in different formats</p>
+
+      <div class="export-grid">
+        <div class="export-card">
+          <div class="export-icon" style="background:rgba(129,39,207,0.10)"><span class="material-symbols-outlined" style="color:var(--primary)">description</span></div>
+          <div class="export-title">Export as JSON</div>
+          <div class="export-desc">Full data export including companies, people, and all relationships</div>
+          <a href="/api/export/json" class="btn-primary" style="text-decoration:none;margin-top:auto"><span class="material-symbols-outlined">download</span>Download JSON</a>
+        </div>
+        <div class="export-card">
+          <div class="export-icon" style="background:rgba(0,107,95,0.10)"><span class="material-symbols-outlined" style="color:var(--secondary)">table_chart</span></div>
+          <div class="export-title">Export as CSV</div>
+          <div class="export-desc">People directory in spreadsheet format — name, title, department, company</div>
+          <a href="/api/export/csv" class="btn-primary" style="text-decoration:none;margin-top:auto;background:linear-gradient(135deg,var(--secondary),#008c7a)"><span class="material-symbols-outlined">download</span>Download CSV</a>
+        </div>
+      </div>
+
+      <div class="settings-group" style="margin-top:var(--sp-6)">
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label" style="color:var(--tertiary)">Danger Zone</div>
+            <div class="settings-row-desc">These actions cannot be undone</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Reset to sample data</div>
+            <div class="settings-row-desc">Drops all data and re-seeds with the built-in example network</div>
+          </div>
+          <button class="btn-ghost btn-danger" onclick="HN.toast('⚠️  To reset: drop the database and restart the app.')">Reset</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Add/Edit Company Modal -->
+<div class="modal-overlay" id="co-modal">
+  <div class="modal-card">
+    <h2 class="modal-title" id="co-modal-title">Add Company</h2>
+    <form id="co-form" novalidate>
+      <input type="hidden" id="co-edit-id"/>
+      <div class="form-row"><label class="form-label">Company Name *</label><input class="form-input" type="text" id="co-name" placeholder="e.g. Apex Innovations" required/></div>
+      <div class="form-row"><label class="form-label">Industry</label><input class="form-input" type="text" id="co-industry" placeholder="e.g. Technology"/></div>
+      <div class="form-row"><label class="form-label">Founded Year</label><input class="form-input" type="number" id="co-founded" placeholder="e.g. 2018" min="1800" max="2100"/></div>
+      <div class="form-row"><label class="form-label">Description</label><textarea class="form-textarea" id="co-desc" placeholder="What does this company do?"></textarea></div>
+      <div class="form-row">
+        <label class="form-label">Brand Color</label>
+        <div class="color-swatches" id="co-colors">
+          <div class="swatch active" data-idx="0" style="background:#8127cf"></div>
+          <div class="swatch" data-idx="1" style="background:#006b5f"></div>
+          <div class="swatch" data-idx="2" style="background:#a63047"></div>
+          <div class="swatch" data-idx="3" style="background:#1e5ab4"></div>
+          <div class="swatch" data-idx="4" style="background:#b46414"></div>
+          <div class="swatch" data-idx="5" style="background:#3c8c3c"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="co-cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="co-submit"><span class="material-symbols-outlined">save</span>Save Company</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/static/js/base.js"></script>
+<script>
+(async function(){
+  let companies = [];
+  const SWATCH_COLORS = ["#8127cf","#006b5f","#a63047","#1e5ab4","#b46414","#3c8c3c"];
+
+  // ── Section nav ────────────────────────────
+  document.querySelectorAll(".settings-nav a[data-section]").forEach(a => {
+    a.addEventListener("click",()=>{
+      document.querySelectorAll(".settings-nav a").forEach(x=>x.classList.remove("active"));
+      document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+      a.classList.add("active");
+      document.getElementById(`section-${a.dataset.section}`).classList.add("active");
+    });
+  });
+
+  // ── Theme picker ───────────────────────────
+  function updateThemeUI() {
+    const cur = localStorage.getItem("hn-theme") || "system";
+    document.querySelectorAll(".theme-opt").forEach(o => o.classList.toggle("active", o.dataset.theme===cur));
+  }
+  document.querySelectorAll(".theme-opt").forEach(o=>{
+    o.addEventListener("click",()=>{ HN.applyTheme(o.dataset.theme); updateThemeUI(); });
+  });
+  updateThemeUI();
+
+  // ── Graph toggles (store in localStorage) ─
+  ["tog-labels","tog-cross","tog-bubbles","tog-anim"].forEach(id=>{
+    const el = document.getElementById(id);
+    const stored = localStorage.getItem(id);
+    if (stored !== null) el.checked = stored === "true";
+    el.addEventListener("change",()=>{ localStorage.setItem(id,el.checked); HN.toast("Preference saved — reload the map to apply."); });
+  });
+
+  // ── Load companies ─────────────────────────
+  async function loadCompanies() {
+    try {
+      companies = await HN.api.get("/api/companies");
+      renderCoList();
+    } catch(e) { HN.toast("⚠️  Could not load companies."); }
+  }
+
+  const STROKE_COLORS = ["#8127cf","#006b5f","#a63047","#1e5ab4","#b46414","#3c8c3c"];
+
+  function renderCoList() {
+    const list = document.getElementById("co-list");
+    if (!companies.length) {
+      list.innerHTML = `<p style="color:var(--text-muted);font-size:var(--text-sm);padding:var(--sp-4)">No companies yet. Add your first one below.</p>`;
+      return;
+    }
+    list.innerHTML = companies.map(co=>`
+      <div class="co-item">
+        <div class="co-dot" style="background:${co.color.stroke}"></div>
+        <div class="co-info">
+          <div class="co-name">${co.name}</div>
+          <div class="co-meta">${co.industry||'No industry set'} · ${co.headcount} people${co.founded?` · Est. ${co.founded}`:""}</div>
+        </div>
+        <div class="co-actions">
+          <button class="btn-ghost" onclick="editCo(${co.id})"><span class="material-symbols-outlined" style="font-size:16px">edit</span>Edit</button>
+          <button class="btn-ghost btn-danger" onclick="deleteCo(${co.id},'${co.name}')"><span class="material-symbols-outlined" style="font-size:16px">delete</span></button>
+        </div>
+      </div>`).join("");
+  }
+
+  // ── Add/Edit company modal ─────────────────
+  let selectedColorIdx = 0;
+
+  document.getElementById("co-colors").addEventListener("click",e=>{
+    const sw = e.target.closest(".swatch");
+    if (!sw) return;
+    document.querySelectorAll(".swatch").forEach(s=>s.classList.remove("active"));
+    sw.classList.add("active");
+    selectedColorIdx = parseInt(sw.dataset.idx);
+  });
+
+  function openCoModal(co=null) {
+    document.getElementById("co-modal-title").textContent = co ? "Edit Company" : "Add Company";
+    document.getElementById("co-edit-id").value = co ? co.id : "";
+    document.getElementById("co-name").value    = co ? co.name : "";
+    document.getElementById("co-industry").value= co ? co.industry : "";
+    document.getElementById("co-founded").value = co ? co.founded || "" : "";
+    document.getElementById("co-desc").value    = co ? co.description : "";
+    selectedColorIdx = co ? (co.color_index||0) : 0;
+    document.querySelectorAll(".swatch").forEach(s=>s.classList.toggle("active",parseInt(s.dataset.idx)===selectedColorIdx));
+    document.getElementById("co-modal").classList.add("open");
+  }
+
+  function closeCoModal() { document.getElementById("co-modal").classList.remove("open"); }
+  document.getElementById("co-cancel").addEventListener("click",closeCoModal);
+  document.getElementById("co-modal").addEventListener("click",e=>{ if(e.target===document.getElementById("co-modal")) closeCoModal(); });
+  document.getElementById("add-co-btn").addEventListener("click",()=>openCoModal());
+
+  document.getElementById("co-form").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const id   = document.getElementById("co-edit-id").value;
+    const data = {
+      name:        document.getElementById("co-name").value.trim(),
+      industry:    document.getElementById("co-industry").value.trim(),
+      founded_year:parseInt(document.getElementById("co-founded").value)||null,
+      description: document.getElementById("co-desc").value.trim(),
+      color_index: selectedColorIdx,
+    };
+    if (!data.name) { HN.toast("⚠️  Name is required"); return; }
+    const btn = document.getElementById("co-submit"); btn.disabled=true;
+    try {
+      if (id) await HN.api.put(`/api/companies/${id}`, data);
+      else    await HN.api.post("/api/companies", data);
+      HN.toast(`✅  Company ${id?"updated":"created"}`);
+      closeCoModal(); await loadCompanies();
+    } catch(err){ HN.toast(`⚠️  ${err.message}`); }
+    finally{ btn.disabled=false; }
+  });
+
+  window.editCo = function(id) {
+    const co = companies.find(c=>c.id===id);
+    if (co) openCoModal(co);
+  };
+
+  window.deleteCo = async function(id, name) {
+    if (!confirm(`Delete "${name}"? This will unassign all their employees.`)) return;
+    try { await HN.api.del(`/api/companies/${id}`); HN.toast(`🗑️  ${name} deleted`); await loadCompanies(); }
+    catch(e){ HN.toast(`⚠️  ${e.message}`); }
+  };
+
+  await loadCompanies();
+})();
+</script>
+</body>
+</html>

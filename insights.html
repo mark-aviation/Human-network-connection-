@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Insights — The Human Network</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/base.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <style>
+    .page-wrap{padding:calc(var(--header-h)+var(--sp-8)) var(--sp-8) var(--sp-12);}
+    .ins-title{font-family:var(--font-brand);font-size:var(--text-2xl);font-weight:800;color:var(--text-primary);letter-spacing:-.03em;margin-bottom:4px;}
+    .ins-sub{color:var(--text-muted);font-size:var(--text-sm);margin-bottom:var(--sp-8);}
+    /* Summary cards */
+    .summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:var(--sp-4);margin-bottom:var(--sp-8);}
+    .sum-card{background:var(--surface-card);border-radius:var(--radius-lg);padding:var(--sp-5);box-shadow:var(--shadow-ambient);transition:transform var(--dur-mid),box-shadow var(--dur-mid);}
+    .sum-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-float);}
+    .sum-icon{width:40px;height:40px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;margin-bottom:var(--sp-3);}
+    .sum-icon.purple{background:var(--primary-muted);color:var(--primary);}
+    .sum-icon.teal{background:var(--secondary-muted);color:var(--secondary);}
+    .sum-icon.gold{background:rgba(180,150,50,0.12);color:#b49632;}
+    .sum-icon.coral{background:rgba(166,48,71,0.12);color:var(--tertiary);}
+    .sum-n{font-family:var(--font-brand);font-size:var(--text-2xl);font-weight:800;color:var(--text-primary);line-height:1;}
+    .sum-l{font-size:var(--text-xs);color:var(--text-muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+    /* Health meter */
+    .health-bar-wrap{height:10px;background:var(--surface-mid);border-radius:var(--radius-full);overflow:hidden;margin-top:var(--sp-3);}
+    .health-bar{height:100%;border-radius:var(--radius-full);background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width 1s var(--ease-spring);}
+    /* Charts section */
+    .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-6);margin-bottom:var(--sp-8);}
+    @media(max-width:900px){.charts-grid{grid-template-columns:1fr;}}
+    .chart-card{background:var(--surface-card);border-radius:var(--radius-lg);padding:var(--sp-6);box-shadow:var(--shadow-ambient);}
+    .chart-title{font-family:var(--font-brand);font-size:var(--text-md);font-weight:700;color:var(--text-primary);margin-bottom:var(--sp-4);}
+    /* People lists */
+    .people-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-6);margin-bottom:var(--sp-8);}
+    @media(max-width:1100px){.people-grid{grid-template-columns:1fr 1fr;}}
+    @media(max-width:700px){.people-grid{grid-template-columns:1fr;}}
+    .people-card{background:var(--surface-card);border-radius:var(--radius-lg);padding:var(--sp-5);box-shadow:var(--shadow-ambient);}
+    .people-card-title{font-family:var(--font-brand);font-size:var(--text-base);font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-4);}
+    .people-card-title .material-symbols-outlined{font-size:18px;color:var(--primary);}
+    .person-row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) 0;border-bottom:1px solid var(--outline-variant);}
+    .person-row:last-child{border-bottom:none;}
+    .prow-avatar{width:36px;height:36px;border-radius:var(--radius-full);background:var(--primary-muted);display:flex;align-items:center;justify-content:center;font-family:var(--font-brand);font-size:var(--text-xs);font-weight:800;color:var(--primary);flex-shrink:0;overflow:hidden;}
+    .prow-avatar img{width:100%;height:100%;object-fit:cover;}
+    .prow-name{font-weight:600;font-size:var(--text-sm);color:var(--text-primary);}
+    .prow-sub{font-size:var(--text-xs);color:var(--text-muted);}
+    .prow-badge{margin-left:auto;font-family:var(--font-brand);font-size:var(--text-xs);font-weight:800;color:var(--primary);}
+    .warn-badge{color:var(--tertiary);}
+    /* Edge type bar */
+    .edge-bar-wrap{display:flex;flex-direction:column;gap:var(--sp-3);}
+    .edge-bar-row{display:flex;align-items:center;gap:var(--sp-3);}
+    .edge-bar-label{font-size:var(--text-xs);font-weight:600;color:var(--text-secondary);width:110px;flex-shrink:0;text-transform:capitalize;}
+    .edge-bar-track{flex:1;height:10px;background:var(--surface-mid);border-radius:var(--radius-full);overflow:hidden;}
+    .edge-bar-fill{height:100%;border-radius:var(--radius-full);transition:width 1s var(--ease-spring);}
+    .edge-bar-n{font-size:var(--text-xs);font-weight:700;color:var(--text-muted);width:24px;text-align:right;}
+    /* Donut SVG */
+    #donut-svg, #dept-svg{width:100%;height:200px;}
+  </style>
+</head>
+<body>
+<header class="nav-bar">
+  <a href="/" class="nav-logo">The Human Network</a>
+  <nav><ul class="nav-links">
+    <li><a href="/"><span class="material-symbols-outlined">hub</span>Network Map</a></li>
+    <li><a href="/directory"><span class="material-symbols-outlined">people</span>Directory</a></li>
+    <li><a href="/insights" class="active"><span class="material-symbols-outlined">insights</span>Insights</a></li>
+    <li><a href="/settings"><span class="material-symbols-outlined">settings</span>Settings</a></li>
+  </ul></nav>
+  <div class="nav-actions">
+    <button class="nav-btn" id="theme-btn"><span class="material-symbols-outlined" id="theme-icon">dark_mode</span></button>
+    <div class="nav-avatar">YO</div>
+  </div>
+</header>
+
+<main class="page-wrap">
+  <h1 class="ins-title">Network Insights</h1>
+  <p class="ins-sub">A live summary of your organisation's relationships and connections</p>
+
+  <!-- Summary cards (skeleton then real) -->
+  <div class="summary-grid" id="summary-grid">
+    <div class="sum-card skeleton" style="height:110px"></div>
+    <div class="sum-card skeleton" style="height:110px"></div>
+    <div class="sum-card skeleton" style="height:110px"></div>
+    <div class="sum-card skeleton" style="height:110px"></div>
+    <div class="sum-card skeleton" style="height:110px"></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Connection Types</div>
+      <div class="edge-bar-wrap" id="edge-bars"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">People by Company</div>
+      <svg id="donut-svg"></svg>
+      <div id="donut-legend" style="display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-3);justify-content:center;"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">People by Department</div>
+      <svg id="dept-svg"></svg>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Relationship Health</div>
+      <p style="font-size:var(--text-sm);color:var(--text-muted);margin-bottom:var(--sp-4)">Ratio of informal (mentorship/collaboration) connections — higher means a healthier culture</p>
+      <div style="display:flex;align-items:baseline;gap:var(--sp-2);margin-bottom:var(--sp-3)">
+        <span id="health-n" style="font-family:var(--font-brand);font-size:var(--text-hero);font-weight:800;color:var(--primary)">—</span>
+        <span style="font-size:var(--text-lg);color:var(--text-muted)">/ 100</span>
+      </div>
+      <div class="health-bar-wrap"><div class="health-bar" id="health-bar" style="width:0%"></div></div>
+      <p id="health-label" style="font-size:var(--text-xs);color:var(--text-muted);margin-top:var(--sp-3)"></p>
+    </div>
+  </div>
+
+  <div class="people-grid">
+    <div class="people-card">
+      <div class="people-card-title"><span class="material-symbols-outlined">leaderboard</span>Most Connected</div>
+      <div id="most-connected"></div>
+    </div>
+    <div class="people-card">
+      <div class="people-card-title"><span class="material-symbols-outlined">swap_horiz</span>Cross-Company Bridges</div>
+      <div id="bridges"></div>
+    </div>
+    <div class="people-card">
+      <div class="people-card-title"><span class="material-symbols-outlined">person_off</span>Isolated Nodes</div>
+      <div id="isolated"></div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="/static/js/base.js"></script>
+<script>
+(async function(){
+  let data;
+  try { data = await HN.api.get("/api/insights"); }
+  catch(e){ HN.toast("⚠️  Could not load insights."); return; }
+
+  const { summary, most_connected, isolated, bridges, dept_breakdown, company_breakdown, edge_types } = data;
+
+  // ── Summary cards ─────────────────────────
+  const sumGrid = document.getElementById("summary-grid");
+  sumGrid.innerHTML = `
+    <div class="sum-card"><div class="sum-icon purple"><span class="material-symbols-outlined">people</span></div><div class="sum-n">${summary.total_people}</div><div class="sum-l">People</div></div>
+    <div class="sum-card"><div class="sum-icon teal"><span class="material-symbols-outlined">domain</span></div><div class="sum-n">${summary.total_companies}</div><div class="sum-l">Companies</div></div>
+    <div class="sum-card"><div class="sum-icon purple"><span class="material-symbols-outlined">hub</span></div><div class="sum-n">${summary.total_connections}</div><div class="sum-l">Connections</div></div>
+    <div class="sum-card"><div class="sum-icon gold"><span class="material-symbols-outlined">swap_horiz</span></div><div class="sum-n">${summary.cross_company_links}</div><div class="sum-l">Cross-Company</div></div>
+    <div class="sum-card"><div class="sum-icon coral"><span class="material-symbols-outlined">favorite</span></div><div class="sum-n">${summary.health_score}</div><div class="sum-l">Health Score</div></div>
+  `;
+
+  // ── Edge type bars ─────────────────────────
+  const total = Object.values(edge_types).reduce((a,b)=>a+b,0)||1;
+  const barColors = { formal:"var(--outline)", informal:"var(--secondary)", cross_company:"#b49632" };
+  const barLabels = { formal:"Reporting", informal:"Collaboration", cross_company:"Cross-Company" };
+  document.getElementById("edge-bars").innerHTML = Object.entries(edge_types).map(([t,n])=>`
+    <div class="edge-bar-row">
+      <div class="edge-bar-label">${barLabels[t]||t}</div>
+      <div class="edge-bar-track"><div class="edge-bar-fill" style="width:0%;background:${barColors[t]||'var(--primary)'}" data-w="${Math.round(n/total*100)}"></div></div>
+      <div class="edge-bar-n">${n}</div>
+    </div>`).join("");
+  // Animate bars
+  requestAnimationFrame(()=>{ document.querySelectorAll(".edge-bar-fill").forEach(el=>{ setTimeout(()=>el.style.width=el.dataset.w+"%",100); }); });
+
+  // ── Health ─────────────────────────────────
+  document.getElementById("health-n").textContent = summary.health_score;
+  setTimeout(()=>document.getElementById("health-bar").style.width=summary.health_score+"%",150);
+  const hl = summary.health_score>=60?"Strong informal network — great culture signal":summary.health_score>=30?"Moderate informal connections — room to grow":"Mostly formal links — encourage more collaboration";
+  document.getElementById("health-label").textContent = hl;
+
+  // ── Donut (company) ────────────────────────
+  if (company_breakdown.length) {
+    const W=300,H=200,R=Math.min(W,H)/2-20;
+    const svg = d3.select("#donut-svg").attr("viewBox",`0 0 ${W} ${H}`);
+    const arc = d3.arc().innerRadius(R*0.55).outerRadius(R);
+    const pie = d3.pie().value(d=>d.count).sort(null);
+    const colors = ["#8127cf","#006b5f","#a63047","#1e5ab4","#b46414","#3c8c3c"];
+    const arcs   = svg.append("g").attr("transform",`translate(${W/2},${H/2})`).selectAll("path").data(pie(company_breakdown)).enter().append("path");
+    arcs.attr("fill",(_,i)=>colors[i%colors.length]).attr("d",arc).attr("opacity",0).transition().duration(600).delay((_,i)=>i*80).attr("opacity",1);
+    // Legend
+    const legend = document.getElementById("donut-legend");
+    company_breakdown.forEach((d,i)=>{
+      legend.innerHTML+=`<div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs)"><div style="width:10px;height:10px;border-radius:2px;background:${colors[i%colors.length]};flex-shrink:0"></div>${d.company} (${d.count})</div>`;
+    });
+  }
+
+  // ── Dept bar chart ─────────────────────────
+  if (dept_breakdown.length) {
+    const sorted = [...dept_breakdown].sort((a,b)=>b.count-a.count);
+    const W=400,H=200,PAD={t:10,r:20,b:40,l:100};
+    const svg  = d3.select("#dept-svg").attr("viewBox",`0 0 ${W} ${H}`);
+    const xMax = d3.max(sorted,d=>d.count);
+    const x    = d3.scaleLinear().domain([0,xMax]).range([0,W-PAD.l-PAD.r]);
+    const y    = d3.scaleBand().domain(sorted.map(d=>d.dept)).range([0,H-PAD.t-PAD.b]).padding(0.3);
+    const g    = svg.append("g").attr("transform",`translate(${PAD.l},${PAD.t})`);
+    g.selectAll("rect").data(sorted).enter().append("rect")
+      .attr("y",d=>y(d.dept)).attr("height",y.bandwidth()).attr("x",0).attr("width",0)
+      .attr("fill","var(--primary)").attr("opacity",.8).attr("rx",3)
+      .transition().duration(700).delay((_,i)=>i*60).attr("width",d=>x(d.count));
+    g.selectAll("text.lbl").data(sorted).enter().append("text")
+      .attr("y",d=>y(d.dept)+y.bandwidth()/2).attr("x",-6)
+      .attr("dy","0.35em").attr("text-anchor","end")
+      .attr("font-family","'DM Sans',sans-serif").attr("font-size",11).attr("fill","var(--text-secondary)")
+      .text(d=>d.dept);
+    g.selectAll("text.val").data(sorted).enter().append("text")
+      .attr("y",d=>y(d.dept)+y.bandwidth()/2).attr("x",d=>x(d.count)+4)
+      .attr("dy","0.35em").attr("font-family","'Manrope',sans-serif").attr("font-size",11).attr("font-weight","700").attr("fill","var(--primary)")
+      .text(d=>d.count);
+  }
+
+  // ── People lists ───────────────────────────
+  function personRowHTML(p, badge="", badgeClass="prow-badge") {
+    return `<div class="person-row">
+      <div class="prow-avatar">${p.image?`<img src="${p.image}" alt="${p.name}"/>`:HN.initials(p.name)}</div>
+      <div><div class="prow-name">${p.name}</div><div class="prow-sub">${p.title}${p.company_name?` · ${p.company_name}`:""}</div></div>
+      ${badge?`<div class="${badgeClass}">${badge}</div>`:""}
+    </div>`;
+  }
+
+  document.getElementById("most-connected").innerHTML = most_connected.length
+    ? most_connected.map(p=>personRowHTML(p,`${p.connections} links`)).join("")
+    : `<p style="font-size:var(--text-sm);color:var(--text-muted)">No data yet.</p>`;
+
+  document.getElementById("bridges").innerHTML = bridges.length
+    ? bridges.map(p=>personRowHTML(p,"Bridge","prow-badge")).join("")
+    : `<p style="font-size:var(--text-sm);color:var(--text-muted)">No cross-company links yet.</p>`;
+
+  document.getElementById("isolated").innerHTML = isolated.length
+    ? isolated.map(p=>personRowHTML(p,"No links","prow-badge warn-badge")).join("")
+    : `<p style="font-size:var(--text-sm);color:var(--secondary)">✅ Everyone is connected!</p>`;
+})();
+</script>
+</body>
+</html>

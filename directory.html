@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Directory — The Human Network</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/base.css"/>
+  <style>
+    .page-wrap{padding:calc(var(--header-h) + var(--sp-8)) var(--sp-8) var(--sp-12);}
+    .dir-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-6);flex-wrap:wrap;gap:var(--sp-4);}
+    .dir-title{font-family:var(--font-brand);font-size:var(--text-2xl);font-weight:800;color:var(--text-primary);letter-spacing:-.03em;}
+    .dir-title span{color:var(--primary);}
+    .dir-controls{display:flex;align-items:center;gap:var(--sp-3);}
+    .filter-bar{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-6);flex-wrap:wrap;}
+    .search-wrap{position:relative;flex:1;min-width:220px;}
+    .search-wrap input{width:100%;padding:var(--sp-3) var(--sp-4) var(--sp-3) 2.5rem;background:var(--surface-card);border:1.5px solid var(--outline-variant);border-radius:var(--radius-md);font-family:var(--font-ui);font-size:var(--text-base);color:var(--text-primary);outline:none;transition:border-color var(--dur-fast),box-shadow var(--dur-fast);}
+    .search-wrap input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-muted);}
+    .search-wrap .si{position:absolute;left:var(--sp-3);top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:18px;}
+    .filter-select{padding:var(--sp-3) var(--sp-4);background:var(--surface-card);border:1.5px solid var(--outline-variant);border-radius:var(--radius-md);font-family:var(--font-ui);font-size:var(--text-sm);color:var(--text-primary);outline:none;cursor:pointer;transition:border-color var(--dur-fast);}
+    .filter-select:focus{border-color:var(--primary);}
+    .view-toggle{display:flex;background:var(--surface-low);border-radius:var(--radius-md);padding:3px;gap:2px;}
+    .view-btn{width:34px;height:34px;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);transition:background var(--dur-fast),color var(--dur-fast);}
+    .view-btn.active{background:var(--surface-card);color:var(--primary);box-shadow:var(--shadow-ambient);}
+    /* Grid view */
+    .dir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--sp-5);}
+    .person-card{background:var(--surface-card);border-radius:var(--radius-lg);box-shadow:var(--shadow-ambient);padding:var(--sp-5);display:flex;flex-direction:column;align-items:center;text-align:center;cursor:pointer;transition:transform var(--dur-mid),box-shadow var(--dur-mid);}
+    .person-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-float);}
+    .card-avatar{width:64px;height:64px;border-radius:var(--radius-full);margin-bottom:var(--sp-3);position:relative;flex-shrink:0;}
+    .card-avatar::before{content:'';position:absolute;inset:-2px;border-radius:var(--radius-full);background:linear-gradient(135deg,var(--primary),var(--secondary));z-index:0;}
+    .card-avatar img{position:relative;width:100%;height:100%;border-radius:var(--radius-full);object-fit:cover;z-index:1;}
+    .card-avatar .ini{position:absolute;inset:1px;border-radius:var(--radius-full);background:var(--primary-muted);display:flex;align-items:center;justify-content:center;font-family:var(--font-brand);font-size:var(--text-md);font-weight:800;color:var(--primary);z-index:1;}
+    .card-name{font-family:var(--font-brand);font-size:var(--text-base);font-weight:700;color:var(--text-primary);margin-bottom:2px;}
+    .card-title{font-size:var(--text-xs);color:var(--text-muted);margin-bottom:var(--sp-2);}
+    .card-co{font-size:var(--text-xs);font-weight:600;padding:2px var(--sp-2);border-radius:var(--radius-full);border:1px solid;margin-bottom:var(--sp-3);}
+    .card-footer{display:flex;gap:var(--sp-2);width:100%;}
+    .card-tag{flex:1;padding:3px;background:var(--surface-low);border-radius:var(--radius-sm);font-size:10px;font-weight:600;color:var(--text-muted);text-align:center;text-transform:uppercase;letter-spacing:.04em;}
+    /* List view */
+    .dir-list{display:none;flex-direction:column;gap:var(--sp-2);}
+    .dir-list.visible{display:flex;}
+    .dir-grid.hidden{display:none;}
+    .list-item{background:var(--surface-card);border-radius:var(--radius-md);padding:var(--sp-4) var(--sp-5);display:flex;align-items:center;gap:var(--sp-4);cursor:pointer;transition:background var(--dur-fast),box-shadow var(--dur-fast);}
+    .list-item:hover{background:var(--surface-low);box-shadow:var(--shadow-ambient);}
+    .list-avatar{width:44px;height:44px;border-radius:var(--radius-full);flex-shrink:0;position:relative;}
+    .list-avatar::before{content:'';position:absolute;inset:-2px;border-radius:var(--radius-full);background:linear-gradient(135deg,var(--primary),var(--secondary));z-index:0;}
+    .list-avatar img{position:relative;width:100%;height:100%;border-radius:var(--radius-full);object-fit:cover;z-index:1;}
+    .list-avatar .ini{position:absolute;inset:1px;border-radius:var(--radius-full);background:var(--primary-muted);display:flex;align-items:center;justify-content:center;font-family:var(--font-brand);font-size:var(--text-sm);font-weight:800;color:var(--primary);z-index:1;}
+    .list-info{flex:1;min-width:0;}
+    .list-name{font-family:var(--font-brand);font-size:var(--text-base);font-weight:700;color:var(--text-primary);}
+    .list-meta{font-size:var(--text-xs);color:var(--text-muted);margin-top:2px;}
+    .list-right{display:flex;align-items:center;gap:var(--sp-3);}
+    .empty-state{text-align:center;padding:var(--sp-12);color:var(--text-muted);}
+    .empty-state .material-symbols-outlined{font-size:48px;display:block;margin-bottom:var(--sp-3);opacity:.4;}
+    /* Skeleton */
+    .skel-card{background:var(--surface-card);border-radius:var(--radius-lg);padding:var(--sp-5);display:flex;flex-direction:column;align-items:center;gap:var(--sp-3);}
+    .skel-circle{width:64px;height:64px;border-radius:var(--radius-full);}
+    .skel-line{height:12px;border-radius:4px;width:80%;}
+    .skel-line.sm{width:55%;height:10px;}
+  </style>
+</head>
+<body>
+<header class="nav-bar">
+  <a href="/" class="nav-logo">The Human Network</a>
+  <div class="nav-search"><span class="material-symbols-outlined si">search</span><input type="text" id="nav-search" placeholder="Quick search…" autocomplete="off"/></div>
+  <nav><ul class="nav-links">
+    <li><a href="/"><span class="material-symbols-outlined">hub</span>Network Map</a></li>
+    <li><a href="/directory" class="active"><span class="material-symbols-outlined">people</span>Directory</a></li>
+    <li><a href="/insights"><span class="material-symbols-outlined">insights</span>Insights</a></li>
+    <li><a href="/settings"><span class="material-symbols-outlined">settings</span>Settings</a></li>
+  </ul></nav>
+  <div class="nav-actions">
+    <button class="nav-btn" id="theme-btn"><span class="material-symbols-outlined" id="theme-icon">dark_mode</span></button>
+    <div class="nav-avatar">YO</div>
+  </div>
+</header>
+
+<main class="page-wrap">
+  <div class="dir-header">
+    <div>
+      <h1 class="dir-title">People <span id="count-badge"></span></h1>
+      <p style="color:var(--text-muted);font-size:var(--text-sm);margin-top:4px">Everyone in your network</p>
+    </div>
+    <div class="dir-controls">
+      <div class="view-toggle">
+        <button class="view-btn active" id="grid-btn" title="Grid view"><span class="material-symbols-outlined" style="font-size:18px">grid_view</span></button>
+        <button class="view-btn" id="list-btn" title="List view"><span class="material-symbols-outlined" style="font-size:18px">view_list</span></button>
+      </div>
+      <a href="/" class="btn-primary" style="text-decoration:none"><span class="material-symbols-outlined">hub</span>View Map</a>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-wrap">
+      <span class="material-symbols-outlined si">search</span>
+      <input type="text" id="search" placeholder="Search by name, title, department…" autocomplete="off"/>
+    </div>
+    <select class="filter-select" id="co-filter"><option value="">All Companies</option></select>
+    <select class="filter-select" id="dept-filter"><option value="">All Departments</option></select>
+    <select class="filter-select" id="tier-filter">
+      <option value="">All Tiers</option>
+      <option value="executive">Executive</option>
+      <option value="manager">Manager</option>
+      <option value="contributor">Contributor</option>
+    </select>
+  </div>
+
+  <!-- Skeleton loaders -->
+  <div class="dir-grid" id="skeleton-grid">
+    ${Array(6).fill('<div class="skel-card"><div class="skeleton skel-circle"></div><div class="skeleton skel-line"></div><div class="skeleton skel-line sm"></div></div>').join("")}
+  </div>
+
+  <div class="dir-grid" id="grid-view" style="display:none"></div>
+  <div class="dir-list" id="list-view"></div>
+  <div class="empty-state" id="empty" style="display:none">
+    <span class="material-symbols-outlined">person_search</span>
+    <p style="font-size:var(--text-lg);font-weight:700;color:var(--text-secondary)">No people found</p>
+    <p style="margin-top:var(--sp-2)">Try adjusting your filters</p>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="/static/js/base.js"></script>
+<script>
+(async function(){
+  let people = [], companies = [], view = "grid";
+
+  // Load
+  try {
+    [people, companies] = await Promise.all([HN.api.get("/api/employees"), HN.api.get("/api/companies")]);
+    document.getElementById("skeleton-grid").style.display = "none";
+    fillFilters(companies, people);
+    renderAll(people);
+  } catch(e) { HN.toast("⚠️  Could not load directory."); }
+
+  function fillFilters(cos, ppl) {
+    const coSel = document.getElementById("co-filter");
+    cos.forEach(c => { const o=document.createElement("option"); o.value=c.id; o.textContent=c.name; coSel.appendChild(o); });
+    const depts = [...new Set(ppl.map(p=>p.department).filter(Boolean))].sort();
+    const dSel  = document.getElementById("dept-filter");
+    depts.forEach(d => { const o=document.createElement("option"); o.value=d; o.textContent=d; dSel.appendChild(o); });
+  }
+
+  function getFiltered() {
+    const q    = document.getElementById("search").value.toLowerCase().trim();
+    const co   = document.getElementById("co-filter").value;
+    const dept = document.getElementById("dept-filter").value;
+    const tier = document.getElementById("tier-filter").value;
+    return people.filter(p =>
+      (!q || p.name.toLowerCase().includes(q) || p.title.toLowerCase().includes(q) || p.department.toLowerCase().includes(q)) &&
+      (!co   || String(p.company_id) === co) &&
+      (!dept || p.department === dept) &&
+      (!tier || p.tier === tier)
+    );
+  }
+
+  function renderAll(filtered) {
+    document.getElementById("count-badge").textContent = `(${filtered.length})`;
+    renderGrid(filtered);
+    renderList(filtered);
+    document.getElementById("empty").style.display = filtered.length ? "none" : "block";
+  }
+
+  function coColor(person) {
+    const co = companies.find(c => c.id === person.company_id);
+    return co ? co.color : { stroke:"var(--outline)", fill:"var(--surface-low)", label:"var(--text-muted)" };
+  }
+
+  function avatarHTML(p, size=64) {
+    const ini = HN.initials(p.name);
+    if (p.image) return `<img src="${p.image}" alt="${p.name}" style="position:relative;width:100%;height:100%;border-radius:9999px;object-fit:cover;z-index:1;" onerror="this.parentNode.innerHTML='<div class=\\'ini\\'>${ini}</div>'"/>`;
+    return `<div class="ini">${ini}</div>`;
+  }
+
+  function renderGrid(filtered) {
+    const grid = document.getElementById("grid-view");
+    grid.style.display = "grid";
+    grid.innerHTML = filtered.map(p => {
+      const col = coColor(p);
+      const co  = companies.find(c=>c.id===p.company_id);
+      return `
+      <div class="person-card" onclick="openProfile(${p.id})">
+        <div class="card-avatar">${avatarHTML(p)}</div>
+        <div class="card-name">${p.name}</div>
+        <div class="card-title">${p.title}</div>
+        ${co ? `<div class="card-co" style="border-color:${col.stroke};color:${col.label};background:${col.fill}">${co.name}</div>` : ""}
+        <div class="card-footer">
+          <div class="card-tag">${p.department}</div>
+          <div class="card-tag badge-${p.tier}">${p.tier}</div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function renderList(filtered) {
+    const list = document.getElementById("list-view");
+    list.innerHTML = filtered.map(p => {
+      const col = coColor(p);
+      const co  = companies.find(c=>c.id===p.company_id);
+      return `
+      <div class="list-item" onclick="openProfile(${p.id})">
+        <div class="list-avatar">${avatarHTML(p,44)}</div>
+        <div class="list-info">
+          <div class="list-name">${p.name}</div>
+          <div class="list-meta">${p.title} · ${p.department}${co?` · ${co.name}`:""}</div>
+        </div>
+        <div class="list-right">
+          <span class="badge badge-${p.tier}">${p.tier}</span>
+          ${p.email?`<a href="mailto:${p.email}" onclick="event.stopPropagation()" class="btn-ghost" style="padding:4px 10px;font-size:var(--text-xs)"><span class="material-symbols-outlined" style="font-size:14px">mail</span>Email</a>`:""}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // View toggle
+  document.getElementById("grid-btn").addEventListener("click",()=>{ view="grid"; document.getElementById("grid-btn").classList.add("active"); document.getElementById("list-btn").classList.remove("active"); document.getElementById("grid-view").style.display="grid"; document.getElementById("list-view").classList.remove("visible"); });
+  document.getElementById("list-btn").addEventListener("click",()=>{ view="list"; document.getElementById("list-btn").classList.add("active"); document.getElementById("grid-btn").classList.remove("active"); document.getElementById("grid-view").style.display="none"; document.getElementById("list-view").classList.add("visible"); });
+
+  // Filters
+  const refilter = HN.debounce(()=>renderAll(getFiltered()),120);
+  document.getElementById("search").addEventListener("input",refilter);
+  document.getElementById("co-filter").addEventListener("change",refilter);
+  document.getElementById("dept-filter").addEventListener("change",refilter);
+  document.getElementById("tier-filter").addEventListener("change",refilter);
+  document.getElementById("nav-search").addEventListener("input", e=>{
+    document.getElementById("search").value = e.target.value;
+    refilter();
+  });
+
+  window.openProfile = function(id) {
+    window.location.href = `/?person=${id}`;
+  };
+})();
+</script>
+</body>
+</html>
