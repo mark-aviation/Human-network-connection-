@@ -101,6 +101,11 @@ def create_app(config=None):
 def _register_routes(app):
 
     # ── Page routes ──────────────────────────────
+    @app.route("/favicon.ico")
+    def favicon():
+        """Return 204 No Content for favicon requests to suppress 404 errors."""
+        return "", 204
+
     @app.route("/")
     @login_required
     def index():
