@@ -428,19 +428,253 @@ const HNUi = (() => {
     });
   }
 
-  // Placeholder modal openers (simplified)
+  // ── EDIT MODAL ──────────────────────────────
   function openEditModal(node) {
-    // TODO: Implement full edit modal
+    if (!node) return;
+    
+    // Populate form fields
+    document.getElementById("edit-id").value = node.id;
+    document.getElementById("edit-name").value = node.name || "";
+    document.getElementById("edit-title").value = node.title || "";
+    document.getElementById("edit-dept").value = node.department || "";
+    document.getElementById("edit-company").value = node.company_id || "";
+    document.getElementById("edit-tier").value = node.tier || "contributor";
+    document.getElementById("edit-email").value = node.email || "";
+    document.getElementById("edit-persona").value = node.persona || "";
+    document.getElementById("edit-hobbies").value = (node.hobbies || []).join(", ");
+    document.getElementById("edit-tags").value = (node.tags || []).join(", ");
+    document.getElementById("edit-notes").value = node.notes || "";
+
+    // Update avatar preview
+    const avatarDiv = document.getElementById("edit-avatar-preview");
+    if (node.image) {
+      avatarDiv.innerHTML = `<img src="${node.image}" style="width:100%;height:100%;object-fit:cover;"/>`;
+    } else {
+      avatarDiv.innerHTML = HN.initials(node.name);
+    }
+
+    // Clear previous submission handler
+    editForm.onsubmit = null;
+
+    // Attach submission handler
+    editForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = editForm.querySelector("[type=submit]");
+      btn.disabled = true;
+
+      try {
+        const payload = {
+          name: document.getElementById("edit-name").value,
+          title: document.getElementById("edit-title").value,
+          department: document.getElementById("edit-dept").value,
+          company_id: document.getElementById("edit-company").value || null,
+          tier: document.getElementById("edit-tier").value,
+          email: document.getElementById("edit-email").value,
+          persona: document.getElementById("edit-persona").value,
+          hobbies: document.getElementById("edit-hobbies").value.split(",").map(h => h.trim()).filter(Boolean),
+          tags: document.getElementById("edit-tags").value.split(",").map(t => t.trim()).filter(Boolean),
+          notes: document.getElementById("edit-notes").value,
+        };
+
+        await HN.api.put(`/api/employees/${node.id}`, payload);
+        HN.toast("✅ Changes saved");
+        editModal.classList.remove("open");
+        // Reload graph to show updates
+        if (window.load) window.load();
+      } catch (err) {
+        HN.toast(`⚠️  ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
     editModal.classList.add("open");
   }
 
+  // ── CONNECT MODAL ────────────────────────
+  let connFromNode = null;
+  let connToNode = null;
+
   function openConnectModal(fromNode) {
-    // TODO: Implement full connect modal
+    if (!fromNode) return;
+    
+    connFromNode = fromNode;
+    connToNode = null;
+
+    // Show "from" person
+    document.getElementById("conn-from-name").textContent = fromNode.name;
+    document.getElementById("conn-from-title").textContent = fromNode.title;
+    const connFromAvatar = document.getElementById("conn-from-avatar");
+    if (fromNode.image) {
+      connFromAvatar.innerHTML = `<img src="${fromNode.image}" style="width:100%;height:100%;object-fit:cover;"/>`;
+    } else {
+      connFromAvatar.textContent = HN.initials(fromNode.name);
+    }
+
+    // Reset search and target
+    connSearch.value = "";
+    document.getElementById("conn-search-results").style.display = "none";
+    document.getElementById("conn-to-selected").style.display = "none";
+    document.getElementById("conn-label").value = "";
+    document.getElementById("conn-rlabel").value = "";
+    document.getElementById("conn-started").value = "";
+
+    // Reset connection type
+    document.querySelectorAll(".conn-type-opt input").forEach((inp, i) => {
+      inp.checked = i === 0; // formal selected by default
+    });
+
+    // Search functionality
+    connSearch.oninput = async (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      if (!q) {
+        document.getElementById("conn-search-results").style.display = "none";
+        return;
+      }
+
+      try {
+        const employees = await HN.api.get("/api/employees");
+        const filtered = employees.filter(emp =>
+          emp.id !== fromNode.id && (
+            emp.name.toLowerCase().includes(q) ||
+            emp.title.toLowerCase().includes(q)
+          )
+        );
+
+        const resultsDiv = document.getElementById("conn-search-results");
+        resultsDiv.innerHTML = filtered.slice(0, 8).map(emp => `
+          <div class="conn-search-item" onclick="selectConnTo({id:${emp.id}, name:'${emp.name}', title:'${emp.title}', image:'${emp.image || ''}'})">
+            <div class="conn-search-avatar">
+              ${emp.image ? `<img src="${emp.image}"/>` : HN.initials(emp.name)}
+            </div>
+            <div>
+              <div style="font-weight:600;font-size:var(--text-sm);color:var(--text-primary)">${emp.name}</div>
+              <div style="font-size:var(--text-xs);color:var(--text-muted)">${emp.title}</div>
+            </div>
+          </div>
+        `).join("");
+        resultsDiv.style.display = filtered.length > 0 ? "block" : "none";
+      } catch (err) {
+        HN.toast("Could not search employees");
+      }
+    };
+
+    // Submission handler
+    document.getElementById("conn-submit").onclick = async () => {
+      if (!connToNode) {
+        HN.toast("Please select a person to connect to");
+        return;
+      }
+
+      const btn = document.getElementById("conn-submit");
+      btn.disabled = true;
+
+      try {
+        const type = document.querySelector(".conn-type-opt input:checked").value;
+        const payload = {
+          source: connFromNode.id,
+          target: connToNode.id,
+          type: type,
+          label: document.getElementById("conn-label").value,
+          reverse_label: document.getElementById("conn-rlabel").value,
+          started_date: document.getElementById("conn-started").value || null,
+          strength: 1.0,
+        };
+
+        await HN.api.post("/api/relationships", payload);
+        HN.toast("✅ Connection created");
+        connectModal.classList.remove("open");
+        if (window.load) window.load();
+      } catch (err) {
+        HN.toast(`⚠️  ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
     connectModal.classList.add("open");
+    connSearch.focus();
   }
 
+  window.selectConnTo = function(emp) {
+    connToNode = emp;
+    document.getElementById("conn-to-name").textContent = emp.name;
+    document.getElementById("conn-to-selected").style.display = "flex";
+    document.getElementById("conn-search-results").style.display = "none";
+    connSearch.value = "";
+  };
+
+  window.clearConnTo = function() {
+    connToNode = null;
+    document.getElementById("conn-to-selected").style.display = "none";
+    connSearch.value = "";
+    connSearch.focus();
+  };
+
+  // ── EDIT CONNECTION MODAL ────────────────
   function openEditConnModal(rel, fromNode) {
-    // TODO: Implement full edit connection modal
+    if (!rel) return;
+
+    // Populate relationship data
+    document.getElementById("edit-conn-id").value = rel.id;
+    document.getElementById("edit-conn-type").value = rel.type;
+    document.getElementById("edit-conn-label").value = rel.label || "";
+    document.getElementById("edit-conn-rlabel").value = rel.reverse_label || "";
+    document.getElementById("edit-conn-date").value = rel.started_date || "";
+    document.getElementById("edit-conn-strength").value = rel.strength || 1.0;
+
+    // Update strength display
+    updateStrengthLabel();
+
+    // Show from/to names
+    const toNode = window.G?.nodes.find(n => n.id === (rel.target === fromNode.id ? rel.source : rel.target));
+    document.getElementById("edit-conn-from-name").textContent = fromNode.name;
+    document.getElementById("edit-conn-from-label-preview").textContent = 
+      rel.source === fromNode.id ? (rel.label || rel.type) : (rel.reverse_label || rel.type);
+    
+    if (toNode) {
+      document.getElementById("edit-conn-to-name").textContent = toNode.name;
+      document.getElementById("edit-conn-to-label-preview").textContent = 
+        rel.source === fromNode.id ? (rel.reverse_label || rel.type) : (rel.label || rel.type);
+    }
+
+    // Update strength label on slider change
+    document.getElementById("edit-conn-strength").oninput = updateStrengthLabel;
+
+    function updateStrengthLabel() {
+      const val = parseFloat(document.getElementById("edit-conn-strength").value);
+      const labels = ["Very weak", "Weak", "Medium", "Strong", "Very strong"];
+      const idx = Math.min(4, Math.floor(val * 5));
+      document.getElementById("strength-val").textContent = labels[idx];
+    }
+
+    // Submission handler
+    editConnModal.onsubmit = null;
+    editConnModal.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = editConnModal.querySelector("[type=submit]");
+      btn.disabled = true;
+
+      try {
+        const payload = {
+          type: document.getElementById("edit-conn-type").value,
+          label: document.getElementById("edit-conn-label").value,
+          reverse_label: document.getElementById("edit-conn-rlabel").value,
+          started_date: document.getElementById("edit-conn-date").value || null,
+          strength: parseFloat(document.getElementById("edit-conn-strength").value),
+        };
+
+        await HN.api.put(`/api/relationships/${rel.id}`, payload);
+        HN.toast("✅ Connection updated");
+        editConnModal.classList.remove("open");
+        if (window.load) window.load();
+      } catch (err) {
+        HN.toast(`⚠️  ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
     editConnModal.classList.add("open");
   }
 
