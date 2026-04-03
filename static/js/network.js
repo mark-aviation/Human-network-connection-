@@ -1,152 +1,323 @@
 /* ═══════════════════════════════════════════════════
-   THE HUMAN NETWORK — network.js v3
-   - No arrowheads
-   - Wider node spacing (names always visible)
-   - Wider company bubbles
-   - Drag whole company cluster
-   - Companies start far apart
-   - Staggered node reveal
-   - Hierarchy org chart (top-down tree)
-   - Double-click bubble = org chart
+   THE HUMAN NETWORK — network.js v4 (REFACTORED)
+   - Modularized: Uses D3Renderer & GraphController
+   - Improved separation of concerns
+   - Cleaner state management
+   - All Phase 1-4 features integrated
 ═══════════════════════════════════════════════════ */
 (function () {
   "use strict";
 
-  const TIER_R = { executive: 38, manager: 30, contributor: 24 };
-  const TIER_C = {
-    executive:   { fill: "#8127cf", stroke: "#6900b3", text: "#fff" },
-    manager:     { fill: "#006b5f", stroke: "#004d44", text: "#fff" },
-    contributor: { fill: "#ffffff", stroke: "#8127cf", text: "#131b2e" },
-  };
-
-  let G = { nodes: [], companies: [], edges: { formal: [], informal: [], cross_company: [] } };
-  let sim = null, zoom = null, nodeLayer = null;
+  // ── Initialize Controllers ──────────────
+  GraphController.initDOM();
+  const DOM = GraphController.DOM;
+  
+  let { TIER_R, TIER_C } = D3Renderer;
+  let G, sim, zoom, nodeLayer, bubElems, lblElems;
   let focusActive = false, focusNode = null;
-  let focusPicker = null, focusExitPill = null;
+  let focusPicker, focusExitPill;
 
-  /* ── DOM ─────────────────────────────────── */
-  const svg         = document.getElementById("graph-svg");
-  const canvas      = document.getElementById("graph-canvas");
-  const panel       = document.getElementById("profile-panel");
-  const panelClose  = document.getElementById("panel-close");
-  const addPersonBtn= document.getElementById("add-person-btn");
-  const addModal    = document.getElementById("add-modal");
-  const addCancel   = document.getElementById("add-cancel");
-  const addForm     = document.getElementById("add-form");
-  const fileInput   = document.getElementById("file-input");
-  const uploadPrev  = document.getElementById("upload-prev");
-  const uploadPh    = document.getElementById("upload-ph");
-  const coSelect    = document.getElementById("co-select");
-  const searchInput = document.getElementById("search-input");
-  const orgOverlay  = document.getElementById("org-overlay");
-  const orgClose    = document.getElementById("org-close");
-  const msgBtn      = document.getElementById("msg-btn");
-  const orgBtn      = document.getElementById("org-btn");
+  // ── Helpers ─────────────── 
+  function internalPath(d) { return D3Renderer.internalPath(d); }
+  function crossPath(d) { return D3Renderer.crossPath(d); }
 
-  /* ── Load ────────────────────────────────── */
+  /* ── MAIN INIT ──────────────────────────── */
   async function load() {
-    focusPicker   = focusPicker   || document.getElementById("focus-picker");
-    focusExitPill = focusExitPill || document.getElementById("focus-exit-pill");
     try {
-      G = await HN.api.get("/api/graph");
+      G = await GraphController.loadGraph();
+      GraphController.cacheFocusElements();
+      focusPicker   = document.getElementById("focus-picker");
+      focusExitPill = document.getElementById("focus-exit-pill");
+      
       render(G);
       fillCoSelect(G.companies);
       
       // ── Phase 3: Initialize time machine slider ──────────
       if (HNFeatures && HNFeatures.initTimeMachineSlider) {
         setTimeout(() => {
-          const nodeLayer = d3.select(svg).select("g.nodes");
-          const edgeLayer = d3.select(svg).select("g.edges");
-          const crossLayer = d3.select(svg).select("g.cross");
+          const nl = d3.select(DOM.svg).select("g.nodes");
+          const el = d3.select(DOM.svg).select("g.edges");
+          const cl = d3.select(DOM.svg).select("g.cross");
           HNFeatures.initTimeMachineSlider("graph-canvas", G.nodes, 
             [...G.edges.formal, ...G.edges.informal, ...G.edges.cross_company],
-            nodeLayer, edgeLayer, crossLayer, orgOverlay);
+            nl, el, cl, document.getElementById("org-overlay"));
         }, 100);
       }
     } catch(e) { HN.toast("⚠️  Could not load network."); }
   }
 
   function fillCoSelect(cos) {
+    const coSelect = DOM.canvas.parentElement?.querySelector("#co-select") || document.getElementById("co-select");
+    if (!coSelect) return;
     coSelect.innerHTML = '<option value="">— No company —</option>';
-    cos.forEach(c => { const o = document.createElement("option"); o.value = c.id; o.textContent = c.name; coSelect.appendChild(o); });
+    cos.forEach(c => { 
+      const o = document.createElement("option"); 
+      o.value = c.id; 
+      o.textContent = c.name; 
+      coSelect.appendChild(o); 
+    });
   }
 
   /* ── RENDER ──────────────────────────────── */
   function render(data) {
-    // Exit any active focus mode before re-rendering
+    // Exit focus mode
     focusActive = false;
-    focusNode   = null;
+    focusNode = null;
     if (focusExitPill) focusExitPill.style.display = "none";
+
     const { nodes, companies, edges } = data;
-    const W = canvas.clientWidth  || 900;
-    const H = canvas.clientHeight || 600;
+    const renderData = GraphController.prepareRenderData(data);
+    const { nodes: live, links } = renderData;
+    
+    const W = DOM.canvas.clientWidth || 900;
+    const H = DOM.canvas.clientHeight || 600;
 
-    const nodeMap = new Map(nodes.map(n => [n.id, { ...n }]));
-    const live    = [...nodeMap.values()];
+    // Initialize SVG structure
+    const { svg: d3svg, g, defs, bubbleLayer, crossLayer, edgeLayer, nodeLayer: nL } = 
+      D3Renderer.initSvg(DOM.svg);
+    nodeLayer = nL;
 
-    const allEdges = [
-      ...edges.formal.map(e=>({...e})),
-      ...edges.informal.map(e=>({...e})),
-      ...edges.cross_company.map(e=>({...e})),
-    ];
-    const links = allEdges.map(e => ({
-      ...e,
-      source: nodeMap.get(e.source) || e.source,
-      target: nodeMap.get(e.target) || e.target,
-    })).filter(e => typeof e.source === "object");
+    // Add clip paths
+    D3Renderer.addClipPaths(defs, live);
 
-    d3.select(svg).selectAll("*").remove();
-    const d3svg = d3.select(svg);
-    const defs  = d3svg.append("defs");
+    // Setup zoom
+    zoom = GraphController.createZoom(d3svg, g);
 
-    // Shadow filter
-    const sh = defs.append("filter").attr("id","nshadow");
-    sh.append("feDropShadow").attr("dx",0).attr("dy",3).attr("stdDeviation",5).attr("flood-color","rgba(19,27,46,0.15)");
+    // Create simulation
+    sim = GraphController.createSimulation(live, links, DOM.canvas);
 
-    // Clip paths
-    live.forEach(n => {
-      defs.append("clipPath").attr("id",`cp-${n.id}`)
-        .append("circle").attr("r", TIER_R[n.tier]);
+    // Render edges (internal)
+    const { edgeElems, internalLinks } = D3Renderer.renderEdges(edgeLayer, links);
+    
+    // Render edges (cross-company)
+    const { crossElems, crossLinks } = D3Renderer.renderCrossEdges(crossLayer, links);
+
+    // Store edge state globally for toggle buttons
+    window._hnEdgeElems = edgeElems;
+    window._hnCrossElems = crossElems;
+    window._hnInternalLinks = internalLinks;
+    window._hnLineState = { formal: false, informal: false, cross_company: false };
+    _applyLineToggle();
+
+    // Render nodes
+    const nodeElems = D3Renderer.renderNodes(nodeLayer, live);
+    
+    // Add node interactions
+    nodeElems.call(
+      d3.drag()
+        .clickDistance(4)
+        .on("start", (e, d) => {
+          e.sourceEvent.stopPropagation();
+          live.filter(n => n.company_id === d.company_id).forEach(n => { n.fx = n.x; n.fy = n.y; });
+          if (sim) { sim.alphaTarget(0); sim.stop(); }
+        })
+        .on("drag", (e, d) => {
+          const dx = e.dx, dy = e.dy;
+          live.filter(n => n.company_id === d.company_id).forEach(n => {
+            n.x += dx; n.y += dy;
+            n.fx = n.x; n.fy = n.y;
+          });
+          nodeLayer.selectAll("g.node").attr("transform", nd => `translate(${nd.x},${nd.y})`);
+          edgeLayer.selectAll("path").attr("d", internalPath);
+          crossLayer.selectAll("path").attr("d", crossPath);
+          companies.forEach(co => D3Renderer.updateBubble(co, live, bubElems, lblElems));
+        })
+        .on("end", (e, d) => {
+          if (sim) sim.alpha(0.05).restart();
+        })
+    )
+    .on("click", onNodeClick);
+
+    // Phase 3: Keyboard navigation
+    if (HNFeatures && HNFeatures.initKeyboardNavigation) {
+      HNFeatures.initKeyboardNavigation(nodeLayer, fillPanel);
+    }
+
+    // Attach context menus
+    attachContextMenu(nodeElems);
+
+    // Attach double-click focus picker
+    nodeElems.on("dblclick", function(event, d) {
+      event.preventDefault();
+      event.stopPropagation();
+      showFocusPicker(event, d);
     });
 
-    const g           = d3svg.append("g").attr("class","root");
-    const bubbleLayer = g.append("g").attr("class","bubbles");
-    const crossLayer  = g.append("g").attr("class","cross");
-    const edgeLayer   = g.append("g").attr("class","edges");
-    nodeLayer         = g.append("g").attr("class","nodes");
+    // Render company bubbles
+    const { bubElems: bE, lblElems: lE } = D3Renderer.renderCompanies(bubbleLayer, companies);
+    bubElems = bE;
+    lblElems = lE;
 
-    // Zoom
-    zoom = d3.zoom().scaleExtent([0.15,3])
-      .on("zoom", e => g.attr("transform", e.transform));
-    d3svg.call(zoom);
+    // Add company bubble interactions
+    bubbleLayer.selectAll(".co-group").each(function(_, i) {
+      const co = companies[i];
+      const bp = d3.select(this).select("path");
+      
+      bp.on("dblclick", (e) => { e.stopPropagation(); openOrg(co.id); })
+        .call(d3.drag()
+          .on("start", function(event) {
+            event.sourceEvent.stopPropagation();
+            d3.select(this).style("cursor", "grabbing");
+            live.filter(n => n.company_id === co.id).forEach(n => { n.fx = n.x; n.fy = n.y; });
+            if (sim) sim.alphaTarget(0).stop();
+          })
+          .on("drag", function(event) {
+            const dx = event.dx, dy = event.dy;
+            live.filter(n => n.company_id === co.id).forEach(n => {
+              n.x += dx; n.y += dy;
+              n.fx += dx; n.fy += dy;
+            });
+            nodeLayer.selectAll("g.node")
+              .filter(d => d.company_id === co.id)
+              .attr("transform", d => `translate(${d.x},${d.y})`);
+            D3Renderer.updateBubble(co, live, bubElems, lblElems);
+            edgeLayer.selectAll("path").attr("d", internalPath);
+            crossLayer.selectAll("path").attr("d", crossPath);
+          })
+          .on("end", function() {
+            d3.select(this).style("cursor", "grab");
+            if (sim) sim.alphaTarget(0).restart();
+          })
+        );
+    });
 
-    // Seed positions — companies start FAR apart
-    const cids    = [...new Set(live.map(n => n.company_id || "none"))];
-    const aStep   = (2 * Math.PI) / Math.max(cids.length, 1);
-    const spread  = Math.min(W, H) * 0.34;
-    const centres = {};
-    cids.forEach((cid, i) => {
-      centres[cid] = {
-        x: W / 2 + spread * Math.cos(aStep * i - Math.PI / 2),
-        y: H / 2 + spread * Math.sin(aStep * i - Math.PI / 2),
-      };
-      live.filter(n => (n.company_id || "none") === cid).forEach(n => {
-        n.x = centres[cid].x + (Math.random() - .5) * 60;
-        n.y = centres[cid].y + (Math.random() - .5) * 60;
+    // Phase 3: Dynamic contrast
+    if (HNFeatures && HNFeatures.applyDynamicContrast) {
+      HNFeatures.applyDynamicContrast(bubbleLayer, companies);
+    }
+
+    // Tick handler
+    sim.on("tick", () => {
+      edgeElems.attr("d", internalPath);
+      crossElems.attr("d", crossPath);
+      nodeElems.attr("transform", d => `translate(${d.x},${d.y})`);
+      companies.forEach(co => D3Renderer.updateBubble(co, live, bubElems, lblElems));
+    });
+  }
+
+  /* ── LINE TOGGLE ────────────────────────── */
+  function _applyLineToggle() {
+    const state = window._hnLineState || { formal: false, informal: false, cross_company: false };
+    const edgeElems = window._hnEdgeElems;
+    const crossElems = window._hnCrossElems;
+    if (!edgeElems || !crossElems) return;
+
+    edgeElems.transition().duration(250)
+      .attr("stroke-opacity", d => {
+        if (d.type === "formal") return state.formal ? 0.55 : 0;
+        if (d.type === "informal") return state.informal ? 0.55 : 0;
+        return 0;
       });
+
+    crossElems.transition().duration(250)
+      .attr("stroke-opacity", state.cross_company ? 0.7 : 0);
+
+    ["formal", "informal", "cross_company"].forEach(type => {
+      const btn = document.getElementById(`line-toggle-${type}`);
+      if (!btn) return;
+      btn.classList.toggle("active", !!state[type]);
+    });
+  }
+
+  function initLineToggles() {
+    if (document.getElementById("line-toggles")) return;
+
+    const container = document.createElement("div");
+    container.id = "line-toggles";
+    container.style.cssText = `
+      position:fixed;
+      top:80px;
+      right:16px;
+      z-index:150;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    `;
+
+    const buttons = [
+      { type: "formal", label: "Reporting", color: "#7e7385", dash: "none" },
+      { type: "informal", label: "Collaboration", color: "#006b5f", dash: "6 4" },
+      { type: "cross_company", label: "Cross-Company", color: "#b49632", dash: "5 6" },
+    ];
+
+    buttons.forEach(({ type, label, color, dash }) => {
+      const btn = document.createElement("button");
+      btn.id = `line-toggle-${type}`;
+      btn.title = `Toggle ${label} lines`;
+      btn.style.cssText = `
+        display:flex;align-items:center;gap:8px;
+        padding:7px 12px;
+        background:var(--surface-card);
+        border:1.5px solid var(--outline-variant);
+        border-radius:8px;
+        cursor:pointer;
+        font-family:var(--font-ui);
+        font-size:11px;font-weight:700;
+        color:var(--text-muted);
+        text-transform:uppercase;letter-spacing:.06em;
+        box-shadow:var(--shadow-ambient);
+        transition:all 150ms;
+        white-space:nowrap;
+        opacity:0.7;
+      `;
+
+      const svgNS = "http://www.w3.org/2000/svg";
+      const lineSvg = document.createElementNS(svgNS, "svg");
+      lineSvg.setAttribute("width", "28");
+      lineSvg.setAttribute("height", "10");
+      lineSvg.style.flexShrink = "0";
+      const line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", "2");
+      line.setAttribute("y1", "5");
+      line.setAttribute("x2", "26");
+      line.setAttribute("y2", "5");
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", "2");
+      if (dash !== "none") line.setAttribute("stroke-dasharray", dash);
+      lineSvg.appendChild(line);
+
+      btn.appendChild(lineSvg);
+      btn.appendChild(document.createTextNode(label));
+      btn.addEventListener("click", () => {
+        window._hnLineState[type] = !window._hnLineState[type];
+        _applyLineToggle();
+      });
+
+      btn.addEventListener("mouseenter", () => { btn.style.opacity = "1"; });
+      btn.addEventListener("mouseleave", () => {
+        btn.style.opacity = window._hnLineState[type] ? "1" : "0.7";
+      });
+
+      container.appendChild(btn);
     });
 
-    // Simulation — wider spacing, faster settle
-    sim = d3.forceSimulation(live)
-      .force("link", d3.forceLink(links).id(d=>d.id)
-        .distance(d => d.type === "cross_company" ? 380 : d.type === "informal" ? 180 : 150)
-        .strength(d => d.type === "cross_company" ? 0.04 : 0.5))
-      .force("charge",  d3.forceManyBody().strength(-350))
-      .force("center",  d3.forceCenter(W/2, H/2).strength(0.04))
-      .force("collide", d3.forceCollide(d => TIER_R[d.tier] + 28)) // more space
-      .force("cluster", clusterForce(live, centres, 0.07))
-      .alphaDecay(0.03)
-      .velocityDecay(0.4);
+    DOM.canvas.appendChild(container);
+  }
+
+  const styleTag = document.createElement("style");
+  styleTag.textContent = `
+    #line-toggles button.active {
+      opacity:1 !important;
+      background:var(--surface-high) !important;
+      border-color:var(--primary) !important;
+      color:var(--text-primary) !important;
+      box-shadow:0 0 0 2px rgba(129,39,207,0.15), var(--shadow-ambient) !important;
+    }
+  `;
+  document.head.appendChild(styleTag);
+
+  let currentPanelNode = null;
+
+  /* ── NODE CLICK → PANEL ─────────────────── */
+  function onNodeClick(event, d) {
+    event.stopPropagation();
+    const W = DOM.svg.clientWidth, H = DOM.svg.clientHeight;
+    d3.select(DOM.svg).transition().duration(480).ease(d3.easeCubicInOut)
+      .call(zoom.transform, d3.zoomIdentity.translate(W / 2 - d.x * 1.1, H / 2 - d.y * 1.1).scale(1.1));
+    currentPanelNode = d;
+    fillPanel(d);
+    openPanel();
+  }
 
     // ── Cross-company edges — HIDDEN by default ──
     const crossLinks = links.filter(e => e.type === "cross_company");
