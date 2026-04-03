@@ -24,12 +24,18 @@
   /* ── MAIN INIT ──────────────────────────── */
   async function load() {
     try {
+      console.log("[load] Starting...");
       G = await GraphController.loadGraph();
+      console.log("[load] Graph loaded:", G.nodes.length, "nodes,", G.companies.length, "companies");
+      
       GraphController.cacheFocusElements();
       focusPicker   = document.getElementById("focus-picker");
       focusExitPill = document.getElementById("focus-exit-pill");
       
+      console.log("[load] Calling render...");
       render(G);
+      console.log("[load] Render complete");
+      
       fillCoSelect(G.companies);
       
       // ── Phase 3: Initialize time machine slider ──────────
@@ -43,7 +49,10 @@
             nl, el, cl, document.getElementById("org-overlay"));
         }, 100);
       }
-    } catch(e) { HN.toast("⚠️  Could not load network."); }
+    } catch(e) { 
+      console.error("[load] Error:", e);
+      HN.toast("⚠️  Could not load network.");
+    }
   }
 
   function fillCoSelect(cos) {
