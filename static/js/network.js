@@ -353,7 +353,10 @@
     window._hnEdgeElems  = edgeElems;
     window._hnCrossElems = crossElems;
     window._hnInternalLinks = internalLinks;
-    window._hnLineState  = { formal: false, informal: false, cross_company: false };
+    // Preserve existing line state, or initialize if not set
+    if (!window._hnLineState) {
+      window._hnLineState = { formal: true, informal: false, cross_company: false };
+    }
 
     // Apply toggle state after re-render
     _applyLineToggle();
