@@ -1,8 +1,10 @@
 import os, uuid, json, csv, io
 from pathlib import Path
+from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, render_template, Response, session, redirect, url_for, g
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
+from sqlalchemy import func
 from models import db, Company, Employee, Relationship, EventLog, COMPANY_COLORS, User
 from auth import auth_bp, login_required, editor_required, admin_required, get_current_user
 
@@ -29,7 +31,6 @@ def _log_event(employee_id, event_type, description, db_session, extra_data=None
 
 def create_app(config=None):
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    from datetime import timedelta
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY"),
         SQLALCHEMY_DATABASE_URI=os.environ.get("DATABASE_URL", "sqlite:///humannetwork.db"),
@@ -45,6 +46,16 @@ def create_app(config=None):
     if config: app.config.update(config)
     app.config["UPLOAD_FOLDER"].mkdir(parents=True, exist_ok=True)
     db.init_app(app)
+    
+    # ── PRAGMA foreign_keys enforcement ──────────────
+    # Ensure referential integrity in SQLite by enabling FK constraints on connection
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        from sqlalchemy import event
+        @event.listens_for(db.engine, "connect")
+        def set_sqlite_pragma(dbapi_conn, connection_record):
+            if hasattr(dbapi_conn, 'execute'):
+                dbapi_conn.execute("PRAGMA foreign_keys=ON")
+    
     app.register_blueprint(auth_bp)
     with app.app_context():
         db.create_all()
@@ -364,73 +375,188 @@ def _register_routes(app):
         return jsonify(result)
 
     # ── Insights API ─────────────────────────────
+    # Optimized with SQLAlchemy aggregations (no Python loops)
     @app.route("/api/insights")
+    @login_required
     def get_insights():
-        base  = app.config["IMAGE_URL_BASE"]
-        emps  = Employee.query.all()
-        rels  = Relationship.query.all()
-        comps = Company.query.all()
-
-        # Connection counts per person
-        conn_count = {}
-        for r in rels:
-            conn_count[r.source_id] = conn_count.get(r.source_id, 0) + 1
-            conn_count[r.target_id] = conn_count.get(r.target_id, 0) + 1
-
-        # Most connected
+        base = app.config["IMAGE_URL_BASE"]
+        
+        # Use subqueries and func.count() to aggregate in SQL, not Python
+        from sqlalchemy import func, case
+        
+        # 1. Total counts (single query each)
+        total_people = Employee.query.count()
+        total_companies = Company.query.count()
+        total_connections = Relationship.query.count()
+        
+        # 2. Connection count per employee (subquery)
+        conn_query = db.session.query(
+            func.count(Relationship.id).label("conn_count"),
+            case(
+                (Relationship.source_id != None, Relationship.source_id),
+                else_=Relationship.target_id
+            ).label("emp_id")
+        ).group_by("emp_id").all()
+        
+        conn_map = {}
+        for row in conn_query:
+            if row.emp_id in conn_map:
+                conn_map[row.emp_id] += row.conn_count
+            else:
+                conn_map[row.emp_id] = row.conn_count
+        
+        # 3. Most connected (top 5 by connection count)
+        most_connected_ids = sorted(conn_map, key=conn_map.get, reverse=True)[:5]
         most_connected = []
-        if conn_count:
-            sorted_ids = sorted(conn_count, key=lambda x: conn_count[x], reverse=True)[:5]
-            for eid in sorted_ids:
-                e = Employee.query.get(eid)
-                if e: most_connected.append({**e.to_node(base), "connections": conn_count[eid]})
-
-        # Isolated nodes
-        connected_ids = set(conn_count.keys())
-        isolated = [e.to_node(base) for e in emps if e.id not in connected_ids]
-
-        # Department breakdown
-        dept_counts = {}
-        for e in emps:
-            dept_counts[e.department] = dept_counts.get(e.department, 0) + 1
-
-        # Company breakdown
-        comp_counts = {}
-        for e in emps:
-            if e.company_id:
-                co = Company.query.get(e.company_id)
-                if co: comp_counts[co.name] = comp_counts.get(co.name, 0) + 1
-
-        # Edge type breakdown
+        for eid in most_connected_ids:
+            e = Employee.query.get(eid)
+            if e:
+                most_connected.append({**e.to_node(base), "connections": conn_map[eid]})
+        
+        # 4. Isolated nodes (employees with no connections)
+        isolated_ids = [e.id for e in Employee.query.all() if e.id not in conn_map]
+        isolated = [e.to_node(base) for e in Employee.query.filter(Employee.id.in_(isolated_ids)).all()] if isolated_ids else []
+        
+        # 5. Department breakdown (GROUP BY in SQL)
+        dept_breakdown = db.session.query(
+            Employee.department, func.count(Employee.id).label("count")
+        ).group_by(Employee.department).all()
+        dept_breakdown_list = [{"dept": dept or "Unassigned", "count": count} for dept, count in dept_breakdown]
+        
+        # 6. Company breakdown (GROUP BY with JOIN in SQL)
+        company_breakdown = db.session.query(
+            Company.name, func.count(Employee.id).label("count")
+        ).outerjoin(Employee).group_by(Company.id, Company.name).all()
+        company_breakdown_list = [{"company": name or "No Company", "count": count} for name, count in company_breakdown]
+        
+        # 7. Edge type breakdown (GROUP BY on connection_type)
+        edge_type_counts = db.session.query(
+            Relationship.connection_type, func.count(Relationship.id).label("count")
+        ).group_by(Relationship.connection_type).all()
         edge_types = {"formal": 0, "informal": 0, "cross_company": 0}
-        for r in rels: edge_types[r.connection_type] = edge_types.get(r.connection_type, 0) + 1
-
-        # Cross-company bridges (people with cross_company connections)
+        for conn_type, count in edge_type_counts:
+            if conn_type in edge_types:
+                edge_types[conn_type] = count
+        
+        # 8. Cross-company bridges (people with cross_company connections)
+        bridge_query = Relationship.query.filter_by(connection_type="cross_company").all()
         bridge_ids = set()
-        for r in rels:
-            if r.connection_type == "cross_company":
-                bridge_ids.add(r.source_id); bridge_ids.add(r.target_id)
-        bridges = [e.to_node(base) for e in emps if e.id in bridge_ids]
-
-        # Relationship health score (0-100): more informal = healthier
-        total = len(rels)
-        health = round((edge_types["informal"] / total * 100) if total else 0)
-
+        for r in bridge_query:
+            bridge_ids.add(r.source_id)
+            bridge_ids.add(r.target_id)
+        bridges = [e.to_node(base) for e in Employee.query.filter(Employee.id.in_(bridge_ids)).all()] if bridge_ids else []
+        
+        # 9. Health score (informal vs formal relationships)
+        health = round((edge_types["informal"] / total_connections * 100) if total_connections else 0)
+        
         return jsonify({
             "summary": {
-                "total_people":      len(emps),
-                "total_companies":   len(comps),
-                "total_connections": total,
-                "cross_company_links": edge_types["cross_company"],
-                "health_score":      health,
+                "total_people":         total_people,
+                "total_companies":      total_companies,
+                "total_connections":    total_connections,
+                "cross_company_links":  edge_types["cross_company"],
+                "health_score":         health,
             },
             "most_connected":    most_connected,
             "isolated":          isolated,
             "bridges":           bridges,
-            "dept_breakdown":    [{"dept": k, "count": v} for k,v in dept_counts.items()],
-            "company_breakdown": [{"company": k, "count": v} for k,v in comp_counts.items()],
+            "dept_breakdown":    dept_breakdown_list,
+            "company_breakdown": company_breakdown_list,
             "edge_types":        edge_types,
         })
+
+    # ── PDS Export (Personal Data Sheet) ─────────
+    @app.route("/api/export/pds")
+    @login_required
+    def export_pds():
+        """
+        Export employee data in PDS format for your separate Personal Data Sheet generator.
+        Includes all employee fields, relationships, and metadata.
+        JSON structure optimized for piping into your PDS tool.
+        """
+        base = app.config["IMAGE_URL_BASE"]
+        
+        employees_data = []
+        for e in Employee.query.all():
+            # Build relationship data
+            outgoing = []
+            for rel in e.outgoing_edges:
+                target = Employee.query.get(rel.target_id)
+                if target:
+                    outgoing.append({
+                        "target_id": rel.target_id,
+                        "target_name": target.name,
+                        "type": rel.connection_type,
+                        "label": rel.label or "",
+                        "strength": rel.strength,
+                        "started": rel.started_date.isoformat() if rel.started_date else None,
+                    })
+            
+            incoming = []
+            for rel in e.incoming_edges:
+                source = Employee.query.get(rel.source_id)
+                if source:
+                    incoming.append({
+                        "source_id": rel.source_id,
+                        "source_name": source.name,
+                        "type": rel.connection_type,
+                        "label": rel.label or "",
+                        "reverse_label": rel.reverse_label or "",
+                        "strength": rel.strength,
+                        "started": rel.started_date.isoformat() if rel.started_date else None,
+                    })
+            
+            # Get company data
+            company = None
+            if e.company_id:
+                co = Company.query.get(e.company_id)
+                if co:
+                    company = {
+                        "id": co.id,
+                        "name": co.name,
+                        "industry": co.industry,
+                        "color_index": co.color_index,
+                    }
+            
+            # Build complete employee record
+            employee_record = {
+                "id": e.id,
+                "name": e.name,
+                "title": e.title,
+                "department": e.department,
+                "tier": e.node_tier,
+                "email": e.email,
+                "company": company,
+                "persona": e.persona_description,
+                "hobbies": [h.strip() for h in (e.hobbies or "").split(",") if h.strip()],
+                "notes": e.notes,
+                "tags": [t.strip() for t in (e.tags or "").split(",") if t.strip()],
+                "profile_image": f"{base}{e.profile_image}" if e.profile_image else None,
+                "relationships": {
+                    "outgoing": outgoing,
+                    "incoming": incoming,
+                },
+                "created_at": e.created_at.isoformat(),
+                "updated_at": e.updated_at.isoformat(),
+            }
+            
+            employees_data.append(employee_record)
+        
+        # Build metadata
+        companies_list = [c.to_dict(base) for c in Company.query.all()]
+        
+        pds_export = {
+            "metadata": {
+                "export_date": datetime.utcnow().isoformat(),
+                "total_employees": len(employees_data),
+                "total_companies": len(companies_list),
+                "total_relationships": Relationship.query.count(),
+            },
+            "employees": employees_data,
+            "companies": companies_list,
+        }
+        
+        return jsonify(pds_export)
 
     # ── PDF Export ───────────────────────────────
     @app.route("/api/export/pdf")
